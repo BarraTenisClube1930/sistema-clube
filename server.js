@@ -46,6 +46,14 @@ if (process.env.DATABASE_URL) {
   `).then(() => console.log('✅ Tabela socios OK (PostgreSQL)'))
     .catch(e => console.error('Erro ao criar tabela socios:', e.message));
 
+pool.query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS papel     TEXT NOT NULL DEFAULT 'visitante'`)
+    .then(() => console.log('✅ Coluna papel OK'))
+    .catch(e => console.error('Migração papel:', e.message));
+
+  pool.query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS criado_em TEXT`)
+    .then(() => console.log('✅ Coluna criado_em OK'))
+    .catch(e => console.error('Migração criado_em:', e.message));
+
   pool.query(`
     CREATE TABLE IF NOT EXISTS usuarios (
       id            SERIAL PRIMARY KEY,
