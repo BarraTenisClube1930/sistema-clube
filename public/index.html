@@ -201,6 +201,13 @@ h2{color:var(--navy);font-size:18px;margin-bottom:16px}
       <div class="field"><label>Novo Usuário</label><input id="reg-user" type="text" placeholder="Escolha um usuário" onkeydown="if(event.key==='Enter')doRegister()"/></div>
       <div class="field"><label>Senha</label><input id="reg-pass" type="password" placeholder="Escolha uma senha" onkeydown="if(event.key==='Enter')doRegister()"/></div>
       <div class="field"><label>Confirmar Senha</label><input id="reg-pass2" type="password" placeholder="Repita a senha" onkeydown="if(event.key==='Enter')doRegister()"/></div>
+      <div class="field"><label>Nível de Acesso</label>
+        <select id="reg-papel">
+          <option value="visitante">🟢 Visitante — só visualizar</option>
+          <option value="operador">🟡 Operador — cadastrar e editar</option>
+          <option value="administrador">🔴 Administrador — acesso total</option>
+        </select>
+      </div>
       <button class="btn-login" onclick="doRegister()">✅ Criar Conta</button>
       <div class="login-register"><a onclick="toggleRegister(false)">← Voltar ao login</a></div>
     </div>
@@ -431,7 +438,7 @@ h2{color:var(--navy);font-size:18px;margin-bottom:16px}
 <div id="tab-titulos" class="content" style="display:none">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
     <h2 style="margin:0">📜 Controle de Títulos Proprietários</h2>
-    <button class="btn-green" onclick="abrirModalTransferencia()">🔄 Registrar Transferência</button>
+    ${isAdmin() ? '<button class="btn-green" onclick="abrirModalTransferencia()">🔄 Registrar Transferência</button>' : ''}
   </div>
   <div class="info-box" style="margin-bottom:16px">
     Conforme Art. 13–15 do Estatuto, os títulos são <strong>indivisíveis, nominais e transferíveis</strong>. A taxa de transferência é de <strong>R$ 2.000,00</strong>, exceto entre cônjuge, descendente, ascendente ou consanguíneo (Art. 15 §3º).
@@ -532,7 +539,7 @@ h2{color:var(--navy);font-size:18px;margin-bottom:16px}
     <h2 style="margin:0">🔒 Log de Auditoria</h2>
     <div style="display:flex;gap:8px">
       <button class="btn-outline" onclick="exportarAuditoria()" style="font-size:12px;padding:6px 12px">📥 Exportar Log</button>
-      <button style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600" onclick="limparAuditoria()">🗑️ Limpar</button>
+      ${isAdmin() ? '<button style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600" onclick="limparAuditoria()">🗑️ Limpar</button>' : ''}
     </div>
   </div>
 
@@ -683,13 +690,14 @@ async function doRegister() {
     const r = await fetch('/api/usuarios', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ usuario: u, senha: p })
+      body: JSON.stringify({ usuario: u, senha: p, papel: document.getElementById('reg-papel')?.value || 'visitante' })
     });
     const d = await r.json();
     if (!r.ok) { showLoginError(d.error || 'Erro ao criar conta.'); return; }
     sessionStorage.setItem('btc_session', u);
+    sessionStorage.setItem('btc_papel', d.papel || 'visitante');
     registrarAuditoria('LOGIN', 'Conta criada: ' + u);
-    enterSystem(u);
+    enterSystem(u, d.papel || 'visitante');
   } catch (e) {
     showLoginError('Erro de conexão com o servidor.');
   }
@@ -703,13 +711,14 @@ async function doLogin() {
     const r = await fetch('/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ usuario: u, senha: p })
+      body: JSON.stringify({ usuario: u, senha: p, papel: document.getElementById('reg-papel')?.value || 'visitante' })
     });
     const d = await r.json();
     if (!r.ok) { showLoginError(d.error || 'Usuário ou senha incorretos.'); return; }
     sessionStorage.setItem('btc_session', u);
+    sessionStorage.setItem('btc_papel', d.papel || 'visitante');
     registrarAuditoria('LOGIN', 'Login bem-sucedido');
-    enterSystem(u);
+    enterSystem(u, d.papel || 'visitante');
   } catch (e) {
     showLoginError('Erro de conexão com o servidor.');
   }
@@ -720,9 +729,30 @@ function doLogout() {
   sessionStorage.removeItem('btc_session');
   location.reload();
 }
-function enterSystem(u) {
+// ===== CONTROLE DE PERMISSÕES =====
+function getPapel() {
+  return sessionStorage.getItem('btc_papel') || 'visitante';
+}
+function isAdmin()    { return getPapel() === 'administrador'; }
+function isOperador() { return ['administrador','operador'].includes(getPapel()); }
+
+function aplicarPermissoes() {
+  const papel = getPapel();
+  // Aba "Novo Cadastro": só admin e operador
+  const tabCadastro = document.querySelector('.tab-btn[onclick*="cadastro"]');
+  if (tabCadastro) tabCadastro.style.display = isOperador() ? '' : 'none';
+  // Badge de papel no header
+  const lblUser = document.getElementById('lbl-user');
+  if (lblUser) {
+    const badges = {administrador:'🔴 Admin', operador:'🟡 Operador', visitante:'🟢 Visitante'};
+    lblUser.textContent = sessionStorage.getItem('btc_session') + ' (' + (badges[papel] || papel) + ')';
+  }
+}
+
+function enterSystem(u, papel) {
   document.getElementById('login-overlay').style.display = 'none';
-  document.getElementById('lbl-user').textContent = u;
+  if (papel) sessionStorage.setItem('btc_papel', papel);
+  aplicarPermissoes();
   loadData();
   carregarSocios();
 }
@@ -936,7 +966,7 @@ function renderSocios() {
       </div>
       <button class="btn-sm" onclick="abrirFicha(${s.id})">📋</button>
       <button class="btn-sm" onclick="irCarteirinha(${s.id})">🪪</button>
-      <button class="btn-del" onclick="deletarSocio(${s.id})">🗑️</button>
+      ${isAdmin() ? '<button class="btn-del" onclick="deletarSocio('+s.id+')">🗑️</button>' : ''}
     </div>`).join('');
 }
 
@@ -1128,7 +1158,7 @@ function renderFichaView(s){
         <div class="ficha-mat">Matrícula #${sanitize(String(s.matricula))}${s.numTitulo?' · Título #'+sanitize(s.numTitulo):''} · Cadastrado em ${sanitize(s.dataCadastro)}</div>
         <div style="margin-top:6px">${tipoTag(s.tipoSocio)} ${sitTag(s.situacao||'ativo')}</div>
         <div class="ficha-actions">
-          <button class="btn-edit" onclick="editarFicha(${s.id})">✏️ Editar</button>
+          ${isOperador() ? '<button class="btn-edit" onclick="editarFicha('+s.id+')">✏️ Editar</button>' : ''}
           <button class="btn-sm" onclick="irCarteirinha(${s.id})">🪪 Carteirinha</button>
           <button class="btn-back" onclick="showTab('socios')">← Voltar</button>
         </div>

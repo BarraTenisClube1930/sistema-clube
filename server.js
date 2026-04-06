@@ -51,6 +51,7 @@ if (process.env.DATABASE_URL) {
       id            SERIAL PRIMARY KEY,
       usuario       TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
+      papel         TEXT NOT NULL DEFAULT 'visitante',
       criado_em     TEXT
     )
   `).then(() => console.log('✅ Tabela usuarios OK (PostgreSQL)'))
@@ -96,6 +97,7 @@ if (process.env.DATABASE_URL) {
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     usuario       TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
+    papel         TEXT NOT NULL DEFAULT 'visitante',
     criado_em     TEXT
   )`, err => { if (err) console.error('Erro usuarios:', err.message); });
 
@@ -229,11 +231,12 @@ app.post('/api/usuarios', async (req, res) => {
   try {
     // Gera hash bcrypt com salt único por usuário
     const hash = await bcrypt.hash(senha, SALT_ROUNDS);
+    const papel = ['administrador','operador','visitante'].includes(req.body.papel) ? req.body.papel : 'visitante';
     await db.run(
-      `INSERT INTO usuarios (usuario, password_hash, criado_em) VALUES ($1, $2, $3)`,
-      [usuario, hash, new Date().toISOString()]
+      `INSERT INTO usuarios (usuario, password_hash, papel, criado_em) VALUES ($1, $2, $3, $4)`,
+      [usuario, hash, papel, new Date().toISOString()]
     );
-    res.status(201).json({ ok: true, usuario });
+    res.status(201).json({ ok: true, usuario, papel });
   } catch (e) {
     if (e.message.includes('UNIQUE') || e.message.includes('unique'))
       return res.status(409).json({ error: 'Este usuário já existe.' });
@@ -256,7 +259,7 @@ app.post('/api/login', async (req, res) => {
     const ok = await bcrypt.compare(senha, rows[0].password_hash);
     if (!ok)
       return res.status(401).json({ error: 'Senha incorreta.' });
-    res.json({ ok: true, usuario: rows[0].usuario });
+    res.json({ ok: true, usuario: rows[0].usuario, papel: rows[0].papel || 'visitante' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
