@@ -6,7 +6,10 @@ require('dotenv').config();
 
 const express = require('express');
 const path    = require('path');
+const bcrypt  = require('bcrypt');
 const app     = express();
+
+const SALT_ROUNDS = 12; // custo do hash — maior = mais seguro, mais lento
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -220,13 +223,15 @@ app.delete('/api/socios/:id', async (req, res) => {
 
 // Registrar usuário
 app.post('/api/usuarios', async (req, res) => {
-  const { usuario, passwordHash } = req.body;
-  if (!usuario || !passwordHash)
+  const { usuario, senha } = req.body;
+  if (!usuario || !senha)
     return res.status(400).json({ error: 'Dados incompletos.' });
   try {
+    // Gera hash bcrypt com salt único por usuário
+    const hash = await bcrypt.hash(senha, SALT_ROUNDS);
     await db.run(
       `INSERT INTO usuarios (usuario, password_hash, criado_em) VALUES ($1, $2, $3)`,
-      [usuario, passwordHash, new Date().toISOString()]
+      [usuario, hash, new Date().toISOString()]
     );
     res.status(201).json({ ok: true, usuario });
   } catch (e) {
@@ -238,8 +243,8 @@ app.post('/api/usuarios', async (req, res) => {
 
 // Login
 app.post('/api/login', async (req, res) => {
-  const { usuario, passwordHash } = req.body;
-  if (!usuario || !passwordHash)
+  const { usuario, senha } = req.body;
+  if (!usuario || !senha)
     return res.status(400).json({ error: 'Dados incompletos.' });
   try {
     const rows = await db.query(
@@ -247,7 +252,9 @@ app.post('/api/login', async (req, res) => {
     );
     if (!rows.length)
       return res.status(401).json({ error: 'Usuário não encontrado. Crie uma conta primeiro.' });
-    if (rows[0].password_hash !== passwordHash)
+    // bcrypt.compare compara a senha com o hash armazenado
+    const ok = await bcrypt.compare(senha, rows[0].password_hash);
+    if (!ok)
       return res.status(401).json({ error: 'Senha incorreta.' });
     res.json({ ok: true, usuario: rows[0].usuario });
   } catch (e) {
