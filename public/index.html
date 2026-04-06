@@ -185,9 +185,7 @@ h2{color:var(--navy);font-size:18px;margin-bottom:16px}
     </div>
     <h2>BARRA TÊNIS CLUBE</h2>
     <div class="subtitle">Sistema de Gestão de Sócios</div>
-    <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:6px;padding:6px 10px;font-size:10px;color:#92400e;margin-bottom:8px;text-align:left">
-      ⚠️ <strong>Aviso de segurança:</strong> Este sistema armazena dados localmente. Não compartilhe o computador sem sair da conta. Configure o Firebase para maior segurança.
-    </div>
+
     <div id="login-error" class="login-err"></div>
     <div id="login-fields">
       <div class="field"><label>Usuário</label><input id="login-user" type="text" placeholder="Digite seu usuário" onkeydown="if(event.key==='Enter')doLogin()"/></div>
@@ -220,9 +218,9 @@ h2{color:var(--navy);font-size:18px;margin-bottom:16px}
       <button onclick="exportarBackup()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.4);color:white;padding:3px 9px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;" title="Salvar todos os dados num arquivo JSON">💾 Exportar</button>
       <label style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.4);color:white;padding:3px 9px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;" title="Carregar dados de um arquivo JSON">📂 Importar<input type="file" accept=".json" onchange="importarBackup(event)" style="display:none"/></label>
     </div>
-    <div class="sync-status offline" id="sync-status">
-      <div class="sync-dot offline"></div>
-      <span id="sync-text">Conectando...</span>
+    <div class="sync-status online" id="sync-status">
+      <div class="sync-dot online"></div>
+      <span id="sync-text">☁️ Nuvem</span>
     </div>
   </div>
 </div>
@@ -533,9 +531,7 @@ h2{color:var(--navy);font-size:18px;margin-bottom:16px}
       <button style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600" onclick="limparAuditoria()">🗑️ Limpar</button>
     </div>
   </div>
-  <div class="info-box yellow" style="margin-bottom:16px">
-    ⚠️ <strong>Aviso:</strong> Este log é armazenado localmente e pode ser limpo. Para auditoria inviolável, configure o Firebase — os dados serão gravados na nuvem com timestamp do servidor.
-  </div>
+
   <input class="search-input" id="audit-search" type="text" placeholder="🔍 Buscar no log..." oninput="renderAuditoria()"/>
   <div id="audit-list"></div>
 </div>
@@ -1390,10 +1386,10 @@ function maskCPF(el) {
 }
 
 function maskTel(el) {
+  // Aceita: +55 (24) 99999-9999  → 13 dígitos: 55 + DDD(2) + número(8 ou 9)
   let v = el.value.replace(/\D/g, '').slice(0, 13);
-  // +55 (XX) XXXXX-XXXX
-  if (v.length > 12)      v = v.replace(/(\d{2})(\d{2})(\d{5})(\d{1,4})/, '+$1 ($2) $3-$4');
-  else if (v.length > 9)  v = v.replace(/(\d{2})(\d{2})(\d{4,5})(\d*)/, '+$1 ($2) $3');
+  if (v.length > 11)      v = v.replace(/(\d{2})(\d{2})(\d{5})(\d{1,4})$/, '+$1 ($2) $3-$4');
+  else if (v.length > 9)  v = v.replace(/(\d{2})(\d{2})(\d{5})/, '+$1 ($2) $3');
   else if (v.length > 6)  v = v.replace(/(\d{2})(\d{2})(\d{1,5})/, '+$1 ($2) $3');
   else if (v.length > 4)  v = v.replace(/(\d{2})(\d{2})(\d*)/, '+$1 ($2) $3');
   else if (v.length > 2)  v = v.replace(/(\d{2})(\d{1,2})/, '+$1 ($2');
