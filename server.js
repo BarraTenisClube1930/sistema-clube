@@ -6,7 +6,7 @@ require('dotenv').config();
 
 const express = require('express');
 const path    = require('path');
-const bcrypt  = require('bcrypt');
+const bcrypt  = require('bcryptjs'); // 100% JS, funciona em qualquer SO
 const app     = express();
 
 const SALT_ROUNDS = 12; // custo do hash — maior = mais seguro, mais lento
