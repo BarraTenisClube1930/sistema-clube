@@ -695,13 +695,13 @@ const firebaseConfig = {
   appId: "1:123456789:web:abc123"
 };
 
-let db, sociosRef, usersRef, isFirebaseReady = false;
+let firebaseDb, sociosRef, usersRef, isFirebaseReady = false;
 try {
   if (firebaseConfig.databaseURL && !firebaseConfig.databaseURL.includes('seu-projeto')) {
     firebase.initializeApp(firebaseConfig);
-    db = firebase.database();
-    sociosRef = db.ref('socios');
-    usersRef = db.ref('users');
+    firebaseDb = firebase.database();
+    sociosRef = firebaseDb.ref('socios');
+    usersRef = firebaseDb.ref('users');
     isFirebaseReady = true;
     updateSyncStatus('online','Online (nuvem)');
   } else {
@@ -736,7 +736,19 @@ function toggleRegister(show) {
 }
 function showLoginError(m){const el=document.getElementById('login-error');el.textContent=m;el.style.display='block';}
 
-// ===== AUTH — usuários salvos no servidor (funciona em qualquer navegador) =====
+// ===== AUTH LOCAL (fallback quando servidor está offline) =====
+const LOCAL_USERS_KEY = 'btc_usuarios_local';
+function getLocalUsers() {
+  try { return JSON.parse(localStorage.getItem(LOCAL_USERS_KEY) || '[]'); } catch(e) { return []; }
+}
+function saveLocalUsers(users) {
+  try { localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(users)); } catch(e) {}
+}
+async function localHashPassword(p) {
+  return 'sha256_' + await sha256('btc_salt_BTC_2024_secure_' + p);
+}
+
+// ===== AUTH — tenta servidor primeiro, usa localStorage como fallback =====
 async function doRegister() {
   const u = document.getElementById('reg-user').value.trim().toLowerCase();
   const p = document.getElementById('reg-pass').value;
@@ -745,29 +757,42 @@ async function doRegister() {
   if (u.length < 3) { showLoginError('Usuário deve ter ao menos 3 caracteres.'); return; }
   if (p.length < 6) { showLoginError('Senha deve ter ao menos 6 caracteres.'); return; }
   if (p !== p2) { showLoginError('As senhas não coincidem.'); return; }
+  const papel = document.getElementById('reg-papel')?.value || 'visitante';
+
+  // Tenta servidor
   try {
-    // Senha enviada em texto puro — HTTPS protege o tráfego
-    // O servidor faz o hash com bcrypt (muito mais seguro)
     const r = await fetch('/api/usuarios', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ usuario: u, senha: p, papel: document.getElementById('reg-papel')?.value || 'visitante' })
+      body: JSON.stringify({ usuario: u, senha: p, papel })
     });
     const d = await r.json();
     if (!r.ok) { showLoginError(d.error || 'Erro ao criar conta.'); return; }
     sessionStorage.setItem('btc_session', u);
     sessionStorage.setItem('btc_papel', d.papel || 'visitante');
-    registrarAuditoria('LOGIN', 'Conta criada: ' + u);
+    registrarAuditoria('LOGIN', 'Conta criada (servidor): ' + u);
     enterSystem(u, d.papel || 'visitante');
-  } catch (e) {
-    showLoginError('Erro de conexão com o servidor.');
-  }
+    return;
+  } catch(e) { /* servidor indisponível, usa modo local */ }
+
+  // Fallback local
+  const users = getLocalUsers();
+  if (users.find(x => x.usuario === u)) { showLoginError('Este usuário já existe.'); return; }
+  const hash = await localHashPassword(p);
+  users.push({ usuario: u, password_hash: hash, papel, criado_em: new Date().toISOString() });
+  saveLocalUsers(users);
+  sessionStorage.setItem('btc_session', u);
+  sessionStorage.setItem('btc_papel', papel);
+  registrarAuditoria('LOGIN', 'Conta criada (local): ' + u);
+  enterSystem(u, papel);
 }
 
 async function doLogin() {
   const u = document.getElementById('login-user').value.trim().toLowerCase();
   const p = document.getElementById('login-pass').value;
   if (!u || !p) { showLoginError('Preencha usuário e senha.'); return; }
+
+  // Tenta servidor
   try {
     const r = await fetch('/api/login', {
       method: 'POST',
@@ -778,11 +803,26 @@ async function doLogin() {
     if (!r.ok) { showLoginError(d.error || 'Usuário ou senha incorretos.'); return; }
     sessionStorage.setItem('btc_session', u);
     sessionStorage.setItem('btc_papel', d.papel || 'visitante');
-    registrarAuditoria('LOGIN', 'Login bem-sucedido');
+    registrarAuditoria('LOGIN', 'Login bem-sucedido (servidor)');
     enterSystem(u, d.papel || 'visitante');
-  } catch (e) {
-    showLoginError('Erro de conexão com o servidor.');
+    return;
+  } catch(e) { /* servidor indisponível, tenta modo local */ }
+
+  // Fallback local
+  const users = getLocalUsers();
+  const user = users.find(x => x.usuario === u);
+  if (!user) { showLoginError('Usuário não encontrado. Crie uma conta primeiro.'); return; }
+  const hash = await localHashPassword(p);
+  // Verifica hash novo ou legado
+  const legacyHash = hashPasswordLegacy(p);
+  if (user.password_hash !== hash && user.password_hash !== legacyHash) {
+    showLoginError('Senha incorreta.');
+    return;
   }
+  sessionStorage.setItem('btc_session', u);
+  sessionStorage.setItem('btc_papel', user.papel || 'visitante');
+  registrarAuditoria('LOGIN', 'Login bem-sucedido (local)');
+  enterSystem(u, user.papel || 'visitante');
 }
 
 function doLogout() {
