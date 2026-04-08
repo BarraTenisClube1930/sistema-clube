@@ -1822,6 +1822,7 @@ async function buscarCEPEdit() {
     const r = await fetch('https://viacep.com.br/ws/' + cep + '/json/');
     const d = await r.json();
     if (d.erro) { status.innerHTML = '<span style="color:#dc2626">CEP nao encontrado</span>'; return; }
+    
     document.getElementById('e-end').value = d.logradouro + ', ';
     document.getElementById('e-bairro').value = d.bairro;
     status.innerHTML = '<span style="color:#059669">Endereco preenchido!</span>';
