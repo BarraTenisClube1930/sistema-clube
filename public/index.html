@@ -935,13 +935,14 @@ async function loadData() {
 function restaurarPlanilha() {
   if (!confirm('Isso vai adicionar os ' + PLANILHA_DATA.length + ' sócios da planilha ao sistema.\n\nSócios já existentes com a mesma matrícula+nome NÃO serão duplicados.\n\nContinuar?')) return;
   // Usa chave matricula+nome para deduplicar independente do tipo do ID
-  const keysExistentes = new Set(socios.map(s => s.matricula + '|' + (s.nome||'').trim().toLowerCase()));
+  const matsExistentes = new Set(socios.map(s => String(s.matricula)));
+  let deletedMats = new Set();
+  try { deletedMats = new Set(JSON.parse(localStorage.getItem('BTC_DELETED_MATS') || '[]')); } catch(e) {}
   let adicionados = 0;
   PLANILHA_DATA.forEach(s => {
-    const key = s.matricula + '|' + (s.nome||'').trim().toLowerCase();
-    if (!keysExistentes.has(key)) {
+    if (!matsExistentes.has(String(s.matricula)) && !deletedMats.has(String(s.matricula))) {
       socios.push({...s, id: String(s.id)});
-      keysExistentes.add(key);
+      matsExistentes.add(String(s.matricula));
       adicionados++;
     }
   });
@@ -1214,6 +1215,14 @@ async function deletarSocio(id){
   const s=socios.find(x=>String(x.id)===String(id));if(!s)return;
   if(!confirm('Deletar "'+s.nome+'" (#'+s.matricula+')?\n\nEsta ação não pode ser desfeita!'))return;
   registrarAuditoria('SOCIO_DELETADO', `Matrícula #${s.matricula} - ${s.nome}`);
+  // Registra matrícula como deletada para impedir re-importação da PLANILHA_DATA
+  try {
+    const deletedMats = JSON.parse(localStorage.getItem('BTC_DELETED_MATS') || '[]');
+    if (!deletedMats.includes(String(s.matricula))) {
+      deletedMats.push(String(s.matricula));
+      localStorage.setItem('BTC_DELETED_MATS', JSON.stringify(deletedMats));
+    }
+  } catch(e) {}
   try {
     const r = await fetch('/api/socios/'+id, {method:'DELETE'});
     if (!r.ok) console.warn('Servidor retornou', r.status, '— removendo localmente de qualquer forma');
@@ -1615,11 +1624,13 @@ async function carregarSocios() {
         socios = serverData.map(s => ({...s, id: String(s.id)}));
       }
       // Mescla planilha apenas para socios que NÃO estão no servidor
-      // Compara por matrícula+nome para evitar duplicatas independente do tipo do ID
-      const serverKeys = new Set(socios.map(s => s.matricula + '|' + s.nome.trim().toLowerCase()));
+      // Compara SOMENTE por matrícula para evitar re-adicionar após edição de nome
+      // Também respeita a lista de matrículas deletadas (para não voltar após exclusão)
+      const serverMats = new Set(socios.map(s => String(s.matricula)));
+      let deletedMats = new Set();
+      try { deletedMats = new Set(JSON.parse(localStorage.getItem('BTC_DELETED_MATS') || '[]')); } catch(e) {}
       PLANILHA_DATA.forEach(p => {
-        const key = p.matricula + '|' + p.nome.trim().toLowerCase();
-        if (!serverKeys.has(key)) {
+        if (!serverMats.has(String(p.matricula)) && !deletedMats.has(String(p.matricula))) {
           socios.push({...p, id: String(p.id)});
         }
       });
