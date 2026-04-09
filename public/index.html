@@ -80,6 +80,7 @@ h2{color:var(--navy);font-size:18px;margin-bottom:16px}
 .tag{display:inline-block;padding:2px 7px;border-radius:3px;font-size:10px;font-weight:700;letter-spacing:.3px}
 .tag-prop{background:#1B3A70;color:white}
 .tag-cont{background:#0891b2;color:white}
+.tag-naosocio{background:#ea580c;color:white}
 .tag-isento{background:#fef3c7;color:#92400e}
 .tag-dep{background:#e0e7ff;color:#3730a3}
 .tag-ativo{background:#d1fae5;color:#065f46}
@@ -329,6 +330,7 @@ h2{color:var(--navy);font-size:18px;margin-bottom:16px}
           <option value="proprietario">Sócio Proprietário</option>
           <option value="remido">Sócio Remido</option>
           <option value="benemerito">Sócio Benemérito</option>
+          <option value="nao_socio">Não Sócio (Frequentador)</option>
           <option value="inativo">Inativo / Desligado</option>
         </select>
       </div>
@@ -395,6 +397,21 @@ h2{color:var(--navy);font-size:18px;margin-bottom:16px}
         <div class="field">
           <label>Nome do Cedente (anterior)</label>
           <input id="f-cedente" type="text" placeholder="Nome do sócio anterior"/>
+        </div>
+      </div>
+    </div>
+
+    <div id="bloco-nao-socio" style="display:none" class="info-box" style="background:#fff7ed;border-color:#fdba74;color:#9a3412">
+      <strong>Não Sócio (Frequentador)</strong> — Pessoa que não é sócia mas frequenta atividades do clube. Apenas <strong>nome e CPF</strong> são obrigatórios. A matrícula é gerada automaticamente.
+      <div style="margin-top:10px">
+        <label style="font-size:12px;font-weight:600;color:#9a3412;display:block;margin-bottom:6px">Atividades que frequenta <span class="req">*</span></label>
+        <div style="display:flex;flex-wrap:wrap;gap:10px">
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;color:#374151;font-weight:500"><input type="checkbox" class="f-atv-ns" value="Academia"/> Academia</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;color:#374151;font-weight:500"><input type="checkbox" class="f-atv-ns" value="Futevôlei"/> Futevôlei</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;color:#374151;font-weight:500"><input type="checkbox" class="f-atv-ns" value="Pilates"/> Pilates</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;color:#374151;font-weight:500"><input type="checkbox" class="f-atv-ns" value="Futsal"/> Futsal</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;color:#374151;font-weight:500"><input type="checkbox" class="f-atv-ns" value="Natação"/> Natação</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;color:#374151;font-weight:500"><input type="checkbox" class="f-atv-ns" value="Dança"/> Dança</label>
         </div>
       </div>
     </div>
@@ -471,6 +488,7 @@ h2{color:var(--navy);font-size:18px;margin-bottom:16px}
         <option value="contribuinte_prefeitura">Func. Prefeitura</option>
         <option value="remido">Remido</option>
         <option value="benemerito">Benemérito</option>
+        <option value="nao_socio">Não Sócio</option>
         <option value="inativo">Inativo</option>
       </select>
       <select id="filter-sit" onchange="renderSocios()" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;outline:none">
@@ -963,6 +981,21 @@ function onTipoChange() {
   document.getElementById('bloco-contribuinte').style.display=t==='contribuinte'?'block':'none';
   document.getElementById('bloco-isento').style.display=(t==='contribuinte_policial'||t==='contribuinte_prefeitura')?'block':'none';
   document.getElementById('bloco-proprietario').style.display=t==='proprietario'?'block':'none';
+  document.getElementById('bloco-nao-socio').style.display=t==='nao_socio'?'block':'none';
+  // Para Não Sócio: matrícula é gerada automaticamente, então desabilita o campo
+  const matInput=document.getElementById('f-matricula');
+  if(matInput){
+    if(t==='nao_socio'){
+      matInput.value='';
+      matInput.placeholder='Gerado automaticamente';
+      matInput.disabled=true;
+      matInput.style.background='#f3f4f6';
+    } else {
+      matInput.placeholder='Ex: 5496';
+      matInput.disabled=false;
+      matInput.style.background='white';
+    }
+  }
 }
 
 // ===== FOTO =====
@@ -1015,20 +1048,42 @@ async function salvarSocio() {
   const cpf  = document.getElementById('f-cpf').value.trim();
   const tel  = document.getElementById('f-tel').value.trim();
   const end  = document.getElementById('f-end').value.trim();
-  const mat  = document.getElementById('f-matricula').value.trim();
+  let   mat  = document.getElementById('f-matricula').value.trim();
+  const tipo = document.getElementById('f-tipo').value;
+  const isNaoSocio = (tipo === 'nao_socio');
 
-  if (!nome)  { showMsg('err', '\u274C Nome \u00e9 obrigat\u00f3rio.'); return; }
-  if (!cpf)   { showMsg('err', '\u274C CPF \u00e9 obrigat\u00f3rio.'); return; }
-  if (!tel)   { showMsg('err', '\u274C Telefone \u00e9 obrigat\u00f3rio.'); return; }
-  if (!end)   { showMsg('err', '\u274C Endere\u00e7o \u00e9 obrigat\u00f3rio.'); return; }
-  if (!mat)   { showMsg('err', '\u274C N\u00famero de matr\u00edcula \u00e9 obrigat\u00f3rio.'); return; }
-
-  if (socios.find(s => String(s.matricula) === mat)) {
-    showMsg('err', '\u274C J\u00e1 existe um s\u00f3cio com esta matr\u00edcula.');
-    return;
+  // Coleta atividades frequentadas (apenas para Não Sócio)
+  let atividadesFreq = [];
+  if (isNaoSocio) {
+    document.querySelectorAll('.f-atv-ns:checked').forEach(cb => atividadesFreq.push(cb.value));
   }
 
-  const tipo = document.getElementById('f-tipo').value;
+  // Validação básica (sempre obrigatórios)
+  if (!nome) { showMsg('err', '\u274C Nome \u00e9 obrigat\u00f3rio.'); return; }
+  if (!cpf)  { showMsg('err', '\u274C CPF \u00e9 obrigat\u00f3rio.'); return; }
+
+  if (isNaoSocio) {
+    // Para Não Sócio, exigimos apenas nome+CPF e ao menos uma atividade
+    if (atividadesFreq.length === 0) {
+      showMsg('err', '\u274C Selecione ao menos uma atividade que o n\u00e3o s\u00f3cio frequenta.');
+      return;
+    }
+    // Gera matrícula automática (faixa 90001+) para não conflitar com sócios
+    const usadas = socios
+      .map(s => Number(s.matricula))
+      .filter(n => !isNaN(n) && n >= 90000);
+    const proxima = usadas.length ? Math.max(...usadas) + 1 : 90001;
+    mat = String(proxima);
+  } else {
+    // Validação tradicional para os demais tipos de sócio
+    if (!tel) { showMsg('err', '\u274C Telefone \u00e9 obrigat\u00f3rio.'); return; }
+    if (!end) { showMsg('err', '\u274C Endere\u00e7o \u00e9 obrigat\u00f3rio.'); return; }
+    if (!mat) { showMsg('err', '\u274C N\u00famero de matr\u00edcula \u00e9 obrigat\u00f3rio.'); return; }
+    if (socios.find(s => String(s.matricula) === mat)) {
+      showMsg('err', '\u274C J\u00e1 existe um s\u00f3cio com esta matr\u00edcula.');
+      return;
+    }
+  }
 
   const socio = {
     nome,
@@ -1045,7 +1100,8 @@ async function salvarSocio() {
     matricula:        mat,
     tipoSocio:        tipo,
     situacao:         document.getElementById('f-situacao').value,
-    atividade:        document.getElementById('f-ativ').value.trim(),
+    atividade:        isNaoSocio ? atividadesFreq.join(', ') : document.getElementById('f-ativ').value.trim(),
+    atividadesFreq:   atividadesFreq,
     carteiraFuncional:(document.getElementById('f-cartfunc')?.value||'').trim(),
     numTitulo:        (document.getElementById('f-numtitulo')?.value||'').trim(),
     origemTitulo:     (document.getElementById('f-origem')?.value||''),
@@ -1083,12 +1139,13 @@ function resetForm(){
   document.getElementById('foto-tit-data').value='';
   document.getElementById('preview-tit').innerHTML='Clique para<br/>adicionar foto';
   document.getElementById('cep-status').textContent='';
+  document.querySelectorAll('.f-atv-ns').forEach(cb=>cb.checked=false);
   depsData=[];depCounter=0;renderDeps();onTipoChange();
 }
 
 // ===== HELPERS =====
-function tipoLabel(t){return sanitize({contribuinte:'Sócio Contribuinte',contribuinte_policial:'Contribuinte (Policial)',contribuinte_prefeitura:'Contribuinte (Prefeitura)',proprietario:'Sócio Proprietário',remido:'Sócio Remido',benemerito:'Sócio Benemérito',inativo:'Inativo'}[t]||t||'—');}
-function tipoCategoria(t){return t==='proprietario'?'proprietario':'contribuinte';}
+function tipoLabel(t){return sanitize({contribuinte:'Sócio Contribuinte',contribuinte_policial:'Contribuinte (Policial)',contribuinte_prefeitura:'Contribuinte (Prefeitura)',proprietario:'Sócio Proprietário',remido:'Sócio Remido',benemerito:'Sócio Benemérito',nao_socio:'Não Sócio',inativo:'Inativo'}[t]||t||'—');}
+function tipoCategoria(t){return t==='proprietario'?'proprietario':(t==='nao_socio'?'nao_socio':'contribuinte');}
 function ecLabel(e){return{solteiro:'Solteiro(a)',casado:'Casado(a)',uniaoEstavel:'União Estável',divorciado:'Divorciado(a)',viuvo:'Viúvo(a)'}[e]||e;}
 function sitLabel(s){return{ativo:'Ativo',suspenso:'Suspenso',inadimplente:'Inadimplente',desligado:'Desligado'}[s]||s;}
 function sitTag(s){const c={ativo:'tag-ativo',suspenso:'tag-suspenso',inadimplente:'tag-inadimplente',desligado:'tag-desligado'};return '<span class="tag '+(c[s]||'tag-ativo')+'">'+sitLabel(s)+'</span>';}
@@ -1097,6 +1154,7 @@ function tipoTag(t){
   if(t==='contribuinte_policial'||t==='contribuinte_prefeitura')return '<span class="tag tag-isento">ISENTO JÓIA</span>';
   if(t==='remido')return '<span class="tag" style="background:#7c3aed;color:white">REMIDO</span>';
   if(t==='benemerito')return '<span class="tag" style="background:#0f766e;color:white">BENEMÉRITO</span>';
+  if(t==='nao_socio')return '<span class="tag tag-naosocio">NÃO SÓCIO</span>';
   if(t==='inativo')return '<span class="tag tag-desligado">INATIVO</span>';
   return '<span class="tag tag-cont">CONTRIBUINTE</span>';
 }
@@ -1109,6 +1167,7 @@ const TIPO_NORM = {
   'contribuinte_prefeitura':'contribuinte_prefeitura',
   'Remido':'remido','remido':'remido',
   'Benemérito':'benemerito','benemerito':'benemerito',
+  'Não Sócio':'nao_socio','nao_socio':'nao_socio','Nao Socio':'nao_socio',
   'Inativo':'inativo','inativo':'inativo',
 };
 function getTipoNorm(s) { return TIPO_NORM[s.tipoSocio] || TIPO_NORM[s.tipo] || s.tipoSocio || s.tipo || ''; }
@@ -1129,12 +1188,15 @@ function renderSocios() {
   const list=document.getElementById('socios-list');
   if(!socios.length){list.innerHTML='<div class="empty">Nenhum sócio cadastrado. Use a aba <strong>Novo Cadastro</strong>.</div>';return;}
   if(!filtered.length){list.innerHTML='<div class="empty">Nenhum resultado.</div>';return;}
-  list.innerHTML=filtered.map(s=>`
+  list.innerHTML=filtered.map(s=>{
+    const ehNS=getTipoNorm(s)==='nao_socio';
+    const matDisplay=ehNS?'—':sanitize(String(s.matricula));
+    return `
     <div class="member-row">
       <div class="avatar">${s.foto?'<img src="'+s.foto+'"/>':(s.nome?.[0]||'?')}</div>
       <div style="flex:1">
         <div class="member-name">${sanitize(s.nome)}</div>
-        <div class="member-sub">Matrícula: <strong>#${sanitize(String(s.matricula))}</strong> · CPF: ${sanitize(s.cpf||'—')}${s.numTitulo?' · Título: <strong>#'+sanitize(s.numTitulo)+'</strong>':''}${(s.tel||s.telefone)?' · '+sanitize(s.tel||s.telefone):''}</div>
+        <div class="member-sub">Matrícula: <strong>${ehNS?'—':'#'+matDisplay}</strong> · CPF: ${sanitize(s.cpf||'—')}${s.numTitulo?' · Título: <strong>#'+sanitize(s.numTitulo)+'</strong>':''}${(s.tel||s.telefone)?' · '+sanitize(s.tel||s.telefone):''}</div>
         <div class="member-tags">
           ${tipoTag(getTipoNorm(s))} ${sitTag(getSitNorm(s))}
           ${s.presidente?'<span class="tag tag-dep">Pres: '+sanitize(s.presidente)+'</span>':''}
@@ -1145,7 +1207,7 @@ function renderSocios() {
       <button class="btn-sm" onclick="abrirFicha('${s.id}')">Ficha</button>
       <button class="btn-sm" onclick="irCarteirinha('${s.id}')">Carteirinha</button>
       ${isAdmin() ? '<button class="btn-del" onclick="deletarSocio(\''+s.id+'\')">Excluir</button>' : ''}
-    </div>`).join('');
+    </div>`;}).join('');
 }
 
 async function deletarSocio(id){
@@ -1187,14 +1249,19 @@ function showTab(name){
 function populateSocioSelect(){
   const sel=document.getElementById('sel-socio');
   sel.innerHTML='<option value="">-- Selecione um sócio --</option>';
-  [...socios].sort((a,b)=>Number(a.matricula)-Number(b.matricula)).forEach(s=>{const o=document.createElement('option');o.value=s.id;o.textContent='#'+s.matricula+' — '+s.nome;sel.appendChild(o);});
+  [...socios].sort((a,b)=>Number(a.matricula)-Number(b.matricula)).forEach(s=>{const o=document.createElement('option');o.value=s.id;const ehNS=getTipoNorm(s)==='nao_socio';o.textContent=(ehNS?'[NS] ':'#'+s.matricula+' — ')+s.nome;sel.appendChild(o);});
 }
 function irCarteirinha(id){populateSocioSelect();document.getElementById('sel-socio').value=id;showTab('carteirinhas');renderCards();}
 
 function btcCardHTML(pessoa, matricula, isDependent, tipoSocio) {
   const nome=isDependent?pessoa.nome+' (Dependente)':pessoa.nome;
   const fotoHtml=pessoa.foto?'<img src="'+pessoa.foto+'" style="width:100%;height:100%;object-fit:cover"/>':(isDependent?'FOTO':'FOTO');
-  const stripeText=tipoSocio==='proprietario'?'SÓCIO PROPRIETÁRIO':'SÓCIO CONTRIBUINTE';
+  let stripeText='SÓCIO CONTRIBUINTE';
+  if(tipoSocio==='proprietario') stripeText='SÓCIO PROPRIETÁRIO';
+  else if(tipoSocio==='nao_socio') stripeText='NÃO SÓCIO';
+  else if(tipoSocio==='remido') stripeText='SÓCIO REMIDO';
+  else if(tipoSocio==='benemerito') stripeText='SÓCIO BENEMÉRITO';
+  const matriculaDisplay=(tipoSocio==='nao_socio')?'—':matricula;
   return `<div class="btc-card">
     <div class="btc-top">
       <div class="btc-header-zone">
@@ -1212,7 +1279,7 @@ function btcCardHTML(pessoa, matricula, isDependent, tipoSocio) {
     <div class="btc-body">
       <div>Atividade: ${pessoa.atividade||''}</div>
       <div><strong>Nome:</strong> ${nome}</div>
-      <div>Matrícula: ${matricula}${pessoa.numTitulo?' · Título: '+pessoa.numTitulo:''}</div>
+      <div>Matrícula: ${matriculaDisplay}${pessoa.numTitulo?' · Título: '+pessoa.numTitulo:''}</div>
     </div>
     <div class="btc-footer">PRESIDENTE ADMINISTRATIVO</div>
   </div>`;
@@ -1292,6 +1359,7 @@ function renderDashboard(){
   const remidos=socios.filter(s=>getTipoNorm(s)==='remido').length;
   const benemeritos=socios.filter(s=>getTipoNorm(s)==='benemerito').length;
   const inativos=socios.filter(s=>getTipoNorm(s)==='inativo').length;
+  const naoSocios=socios.filter(s=>getTipoNorm(s)==='nao_socio').length;
   const conts=socios.filter(s=>['contribuinte','contribuinte_policial','contribuinte_prefeitura'].includes(getTipoNorm(s))).length;
   const isentos=socios.filter(s=>s.isentoJoia).length;
   const mulheres=socios.filter(s=>s.sexo==='F').length;
@@ -1317,6 +1385,7 @@ function renderDashboard(){
     {num:remidos,label:'Remidos'},
     {num:benemeritos,label:'Beneméritos'},
     {num:conts,label:'Contribuintes'},
+    {num:naoSocios,label:'Não Sócios'},
     {num:inativos,label:'Inativos'},
     {num:ativos,label:'Ativos'},
     {num:totalDeps,label:'Dependentes'},
@@ -1334,6 +1403,7 @@ function renderDashboard(){
     {l:'Contribuinte Regular',v:socios.filter(s=>getTipoNorm(s)==='contribuinte').length},
     {l:'Contrib. Policial',v:socios.filter(s=>getTipoNorm(s)==='contribuinte_policial').length},
     {l:'Contrib. Prefeitura',v:socios.filter(s=>getTipoNorm(s)==='contribuinte_prefeitura').length},
+    {l:'Não Sócio',v:naoSocios},
     {l:'Inativo',v:inativos},
   ].filter(d=>d.v>0));
 
@@ -1368,12 +1438,16 @@ function renderFichaView(s){
   const v=document.getElementById('ficha-view');v.style.display='block';
   const fotoHtml=s.foto?'<img src="'+s.foto+'"/>':(s.nome?.[0]||'?');
   const pastaLink=s.pastaDocumentos?'<a href="'+s.pastaDocumentos+'" target="_blank" class="btn-link">Abrir Pasta</a>':'<span style="color:#9ca3af">Nenhum link</span>';
+  const ehNS=getTipoNorm(s)==='nao_socio';
+  const matLine=ehNS
+    ? 'Não Sócio (Frequentador) · Cadastrado em '+sanitize(s.dataCadastro||'')
+    : 'Matrícula #'+sanitize(String(s.matricula))+(s.numTitulo?' · Título #'+sanitize(s.numTitulo):'')+' · Cadastrado em '+sanitize(s.dataCadastro||'');
   v.innerHTML=`
     <div class="ficha-header">
       <div class="ficha-photo">${fotoHtml}</div>
       <div>
         <div class="ficha-name">${sanitize(s.nome)}</div>
-        <div class="ficha-mat">Matrícula #${sanitize(String(s.matricula))}${s.numTitulo?' · Título #'+sanitize(s.numTitulo):''} · Cadastrado em ${sanitize(s.dataCadastro)}</div>
+        <div class="ficha-mat">${matLine}</div>
         <div style="margin-top:6px">${tipoTag(getTipoNorm(s))} ${sitTag(getSitNorm(s))}</div>
         <div class="ficha-actions">
           ${isOperador() ? '<button class="btn-edit" onclick="editarFicha(\''+s.id+'\')">Editar</button>' : ''}
@@ -1777,7 +1851,8 @@ function filtrarSocioCarteirinha() {
     .forEach(s => {
       const opt = document.createElement('option');
       opt.value = s.id;
-      opt.textContent = '#' + s.matricula + ' — ' + s.nome;
+      const ehNS=getTipoNorm(s)==='nao_socio';
+      opt.textContent = (ehNS?'[NS] ':'#' + s.matricula + ' — ') + s.nome;
       sel.appendChild(opt);
     });
   renderCards();
