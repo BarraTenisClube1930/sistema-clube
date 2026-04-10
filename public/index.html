@@ -1693,6 +1693,15 @@ async function editarSocioNoServidor(socio) {
       body: JSON.stringify(socio)
     });
     if (response.ok) {
+      // Normaliza o ID que o servidor possa ter retornado como número
+      try {
+        const salvo = await response.json();
+        if (salvo && salvo.id !== undefined) {
+          const idx = socios.findIndex(x => String(x.id) === String(socio.id));
+          if (idx !== -1) socios[idx].id = String(salvo.id);
+          socio.id = String(salvo.id);
+        }
+      } catch(e) { /* body vazio ou não-JSON — ignora */ }
       await carregarSocios();
       return true;
     }
@@ -1707,7 +1716,7 @@ async function editarSocioNoServidor(socio) {
         const salvo = await r2.json();
         // Atualiza ID no array local para o ID real do servidor
         const idx = socios.findIndex(x => String(x.id) === String(socio.id));
-        if (idx !== -1) socios[idx].id = salvo.id;
+        if (idx !== -1) socios[idx].id = String(salvo.id);
         try { localStorage.setItem(LOCAL_KEY, JSON.stringify(socios)); } catch(e) {}
         await carregarSocios();
         return true;
@@ -1766,6 +1775,8 @@ async function salvarEdicao(){
   const ok = await editarSocioNoServidor(s);
   if (ok) {
     registrarAuditoria('SOCIO_EDITADO', `Matrícula #${s.matricula} - ${s.nome}`);
+    // Garante que fichaEditId reflita o ID atual (pode ter mudado após 404→POST)
+    fichaEditId = String(s.id);
     abrirFicha(fichaEditId);
     const m=document.getElementById('ficha-msg');
     if(m){m.className='alert ok';m.textContent='Dados atualizados!';m.style.display='block';setTimeout(()=>{m.style.display='none';},4000);}
