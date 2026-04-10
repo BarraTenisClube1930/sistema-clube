@@ -451,7 +451,7 @@ h2{color:var(--navy);font-size:18px;margin-bottom:16px}
       <div class="photo-box" id="preview-tit" onclick="document.getElementById('foto-tit-input').click()">Clique para<br/>adicionar foto</div>
       <div style="flex:1">
         <div class="info-box">Formato 3x4 ou retrato</div>
-        <input type="file" id="foto-tit-input" accept="image/*" style="display:none" onchange="previewFotoTit(event)"/>
+        <input type="file" id="foto-tit-input" accept="image/*" capture="environment" style="display:none" onchange="previewFotoTit(event)"/>
         <input type="hidden" id="foto-tit-data"/>
       </div>
     </div>
@@ -496,6 +496,11 @@ h2{color:var(--navy);font-size:18px;margin-bottom:16px}
       </select>
       <span id="badge-count" style="background:var(--navy);color:white;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:600">0</span>
     </div>
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+    <button class="btn-outline" style="font-size:12px;padding:5px 10px" onclick="exportarCSV('todos')">⬇ CSV Completo</button>
+    <button class="btn-outline" style="font-size:12px;padding:5px 10px;border-color:#dc2626;color:#dc2626" onclick="exportarCSV('inadimplentes')">⬇ CSV Inadimplentes</button>
+    <button class="btn-outline" style="font-size:12px;padding:5px 10px;border-color:#059669;color:#059669" onclick="exportarCSV('aniversariantes')">⬇ CSV Aniversariantes do Mês</button>
   </div>
   <input class="search-input" id="search-input" type="text" placeholder="Buscar por nome, matricula, CPF ou no titulo..." oninput="renderSocios()"/>
   <div id="socios-list"></div>
@@ -953,6 +958,39 @@ function updateHeader(){
   const m=getUltimaMatricula();
   document.getElementById('lbl-next-mat').textContent=m>0?'#'+m:'nenhuma';
   document.getElementById('lbl-count').textContent=socios.length;
+  renderAniversariantes();
+}
+function renderAniversariantes(){
+  let el=document.getElementById('aniversariantes-banner');
+  if(!el){
+    el=document.createElement('div');
+    el.id='aniversariantes-banner';
+    el.style.cssText='background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;padding:10px 16px;margin:8px 16px 0;font-size:13px;color:#92400e;display:none';
+    const tabs=document.querySelector('.tabs');
+    if(tabs && tabs.nextSibling) tabs.parentNode.insertBefore(el, tabs.nextSibling);
+  }
+  const hoje=new Date();
+  const mm=String(hoje.getMonth()+1).padStart(2,'0');
+  const dd=String(hoje.getDate()).padStart(2,'0');
+  const em7=new Date(hoje.getTime()+7*86400000);
+  const aniv=socios.filter(s=>{
+    if(!s.dataNasc) return false;
+    const parts=s.dataNasc.split('-');
+    if(parts.length<3) return false;
+    const bMM=parts[1], bDD=parts[2];
+    for(let d=0;d<7;d++){
+      const dt=new Date(hoje.getTime()+d*86400000);
+      if(String(dt.getMonth()+1).padStart(2,'0')===bMM && String(dt.getDate()).padStart(2,'0')===bDD) return true;
+    }
+    return false;
+  });
+  if(aniv.length){
+    el.style.display='block';
+    el.innerHTML='🎂 <strong>Aniversariantes nos próximos 7 dias:</strong> '+aniv.map(s=>{
+      const [,bMM,bDD]=s.dataNasc.split('-');
+      return '<strong>'+s.nome.split(' ')[0]+'</strong> ('+bDD+'/'+bMM+')';
+    }).join(' · ');
+  } else { el.style.display='none'; }
 }
 
 // ===== CEP =====
@@ -1029,7 +1067,7 @@ function renderDeps(){
       <div style="margin-top:8px">
         <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">Foto 3x4</label>
         <div class="photo-box" id="prev-dep-${i}" onclick="document.getElementById('foto-dep-${i}').click()" style="width:75px;height:96px">
-          ${dep.foto?'<img src="'+dep.foto+'"/>':`Clique<br/>p/foto`}
+          ${dep.foto?'<img src="'+dep.foto+'"/>':"Clique<br/>p/foto"}
         </div>
         <input type="file" id="foto-dep-${i}" accept="image/*" style="display:none" onchange="previewFotoDep(event,${i})"/>
       </div>
@@ -1057,6 +1095,7 @@ async function salvarSocio() {
   // Validação básica (sempre obrigatórios)
   if (!nome) { showMsg('err', '\u274C Nome \u00e9 obrigat\u00f3rio.'); return; }
   if (!cpf)  { showMsg('err', '\u274C CPF \u00e9 obrigat\u00f3rio.'); return; }
+  if (cpf && !validarCPF(cpf)) { showMsg('err', '\u274C CPF inv\u00e1lido. Verifique os d\u00edgitos.'); return; }
 
   if (isNaoSocio) {
     // Para Não Sócio, exigimos apenas nome+CPF e ao menos uma atividade
@@ -1171,42 +1210,56 @@ function getTipoNorm(s) { return TIPO_NORM[s.tipoSocio] || TIPO_NORM[s.tipo] || 
 function getSitNorm(s)  { return s.situacao || s.status || 'ativo'; }
 
 // ===== RENDER SÓCIOS =====
-function renderSocios() {
-  const term=(document.getElementById('search-input')?.value||'').toLowerCase();
+const SOCIOS_POR_PAG=60;let _sociosPag=1;
+function renderSocios(resetPag) {
+  if(resetPag!==false) _sociosPag=1;
+  const rawTerm=(document.getElementById('search-input')?.value||'');
+  const term=rawTerm.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
   const ft=(document.getElementById('filter-tipo')?.value||'');
   const fs=(document.getElementById('filter-sit')?.value||'');
+  const norm=(x='')=>String(x).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
   let filtered=socios.filter(s=>{
-    const matchTerm=s.nome?.toLowerCase().includes(term)||String(s.matricula).includes(term)||s.cpf?.includes(term);
+    const matchTerm=norm(s.nome).includes(term)||String(s.matricula).includes(term)||norm(s.cpf).includes(term)||norm(s.obs).includes(term);
     const matchTipo=!ft||getTipoNorm(s)===ft;
     const matchSit=!fs||getSitNorm(s)===fs;
     return matchTerm&&matchTipo&&matchSit;
   }).sort((a,b)=>Number(a.matricula)-Number(b.matricula));
-  document.getElementById('badge-count').textContent=filtered.length+'/'+socios.length;
+  const total=filtered.length;
+  document.getElementById('badge-count').textContent=total+'/'+socios.length;
   const list=document.getElementById('socios-list');
   if(!socios.length){list.innerHTML='<div class="empty">Nenhum sócio cadastrado. Use a aba <strong>Novo Cadastro</strong>.</div>';return;}
   if(!filtered.length){list.innerHTML='<div class="empty">Nenhum resultado.</div>';return;}
-  list.innerHTML=filtered.map(s=>{
+  const totalPags=Math.ceil(total/SOCIOS_POR_PAG);
+  if(_sociosPag>totalPags) _sociosPag=totalPags;
+  const inicio=(_sociosPag-1)*SOCIOS_POR_PAG;
+  const pagina=filtered.slice(inicio,inicio+SOCIOS_POR_PAG);
+  const paginacaoHtml=totalPags>1?`<div style="display:flex;align-items:center;gap:8px;margin:8px 0 4px">
+    ${_sociosPag>1?'<button class="btn-outline" style="padding:4px 10px;font-size:12px" onclick="renderSocios._pag(-1)">← Anterior</button>':''}
+    <span style="font-size:12px;color:#6b7280;padding:0 8px">P\u00e1g ${_sociosPag} de ${totalPags} &middot; ${total} s\u00f3cios</span>
+    ${_sociosPag<totalPags?'<button class="btn-outline" style="padding:4px 10px;font-size:12px" onclick="renderSocios._pag(1)">Pr\u00f3xima \u2192</button>':''}
+  </div>`:'';
+  list.innerHTML=paginacaoHtml+pagina.map(s=>{
     const ehNS=getTipoNorm(s)==='nao_socio';
-    const matDisplay=ehNS?'—':sanitize(String(s.matricula));
+    const matDisplay=ehNS?'\u2014':sanitize(String(s.matricula));
     return `
     <div class="member-row">
       <div class="avatar">${s.foto?'<img src="'+s.foto+'"/>':(s.nome?.[0]||'?')}</div>
       <div style="flex:1">
         <div class="member-name">${sanitize(s.nome)}</div>
-        <div class="member-sub">Matrícula: <strong>${ehNS?'—':'#'+matDisplay}</strong> · CPF: ${sanitize(s.cpf||'—')}${(s.tel||s.telefone)?' · '+sanitize(s.tel||s.telefone):''}</div>
+        <div class="member-sub">Matr\u00edcula: <strong>${ehNS?'\u2014':'#'+matDisplay}</strong> \u00b7 CPF: ${sanitize(s.cpf||'\u2014')}${(s.tel||s.telefone)?' \u00b7 '+sanitize(s.tel||s.telefone):''}</div>
         <div class="member-tags">
           ${tipoTag(getTipoNorm(s))} ${sitTag(getSitNorm(s))}
           ${s.presidente?'<span class="tag tag-dep">Pres: '+sanitize(s.presidente)+'</span>':''}
           ${s.obs?'<span style="font-size:10px;color:#6b7280;font-style:italic">'+sanitize(s.obs.substring(0,50))+(s.obs.length>50?'...':'')+'</span>':''}
-          <span style="color:#9ca3af">${ecLabel(s.estadoCivil)} · ${s.dependentes?.length||0} dep. · Desde ${s.dataCadastro}</span>
+          <span style="color:#9ca3af">${ecLabel(s.estadoCivil)} \u00b7 ${s.dependentes?.length||0} dep. \u00b7 Desde ${s.dataCadastro}</span>
         </div>
       </div>
-      <button class="btn-sm" data-action="ficha" data-id="${s.id}">Ficha</button>
-      <button class="btn-sm" data-action="carteirinha" data-id="${s.id}">Carteirinha</button>
-      ${isAdmin() ? '<button class="btn-del" data-action="deletar" data-id="'+s.id+'">Excluir</button>' : ''}
-    </div>`;}).join('');
+      <button class="btn-sm" onclick="abrirFicha('${s.id}')">Ficha</button>
+      <button class="btn-sm" onclick="irCarteirinha('${s.id}')">Carteirinha</button>
+      ${isAdmin() ? '<button class="btn-del" onclick="deletarSocio(\''+s.id+'\')">Excluir</button>' : ''}
+    </div>`;}).join('')+(totalPags>1?paginacaoHtml:'');
 }
-
+renderSocios._pag=function(dir){_sociosPag+=dir;renderSocios(false);window.scrollTo(0,document.getElementById('tab-socios').offsetTop);};
 async function deletarSocio(id){
   const s=socios.find(x=>String(x.id)===String(id));if(!s)return;
   if(!confirm('Deletar "'+s.nome+'" (#'+s.matricula+')?\n\nEsta ação não pode ser desfeita!'))return;
@@ -1337,7 +1390,7 @@ function renderTitulos(){
           (s.historico||[]).map(h=>`<div class="transfer-row"><strong>${h.data}</strong> — ${h.cedente} → ${h.receptor} (${h.tipo||h.tipo}) ${h.obs?'<em>'+h.obs+'</em>':''}</div>`).join('')+
         '</div>':''}
       </div>
-      <button class="btn-sm" data-action="ficha" data-id="${s.id}">Ficha</button>
+      <button class="btn-sm" onclick="abrirFicha('${s.id}')">Ficha</button>
     </div>`).join('');
 }
 
@@ -1462,9 +1515,9 @@ function renderFichaView(s){
         <div class="ficha-mat">${matLine}</div>
         <div style="margin-top:6px">${tipoTag(getTipoNorm(s))} ${sitTag(getSitNorm(s))}</div>
         <div class="ficha-actions">
-          ${isOperador() ? '<button class="btn-edit" data-action="editar" data-id="'+s.id+'">Editar</button>' : ''}
-          <button class="btn-sm" data-action="carteirinha" data-id="${s.id}">Carteirinha</button>
-          <button class="btn-back" onclick="showTab('socios')">← Voltar</button>
+          ${isOperador() ? '<button class="btn-edit" onclick="editarFicha(\''+s.id+'\')">Editar</button>' : ''}
+          <button class="btn-sm" onclick="irCarteirinha('${s.id}')">Carteirinha</button>
+          <button class="btn-back" onclick="voltarDaFicha()">← Voltar</button>
         </div>
       </div>
     </div>
@@ -1499,16 +1552,34 @@ function renderFichaView(s){
       </div>
       ${s.obs?'<div class="ficha-field"><div class="lbl">Observações</div><div class="val">'+s.obs+'</div></div>':''}
     </div>
+    ${(s.ultPagamento||s.mesesAberto||s.obsFinanceiro)?`<div class="section"><div class="section-title">Financeiro</div><div class="ficha-grid">
+      ${s.ultPagamento?'<div class="ficha-field"><div class="lbl">Último Pagamento</div><div class="val">'+s.ultPagamento+'</div></div>':''}
+      ${s.mesesAberto?'<div class="ficha-field"><div class="lbl">Meses em Aberto</div><div class="val" style="color:#dc2626;font-weight:700">'+s.mesesAberto+'</div></div>':''}
+      ${s.obsFinanceiro?'<div class="ficha-field col2"><div class="lbl">Obs. Financeira</div><div class="val">'+sanitize(s.obsFinanceiro)+'</div></div>':''}
+    </div></div>`:''}
     ${(s.historico||[]).length>0?`<div class="section"><div class="section-title">Historico de Transferencias do Titulo</div>${(s.historico||[]).map(h=>'<div class="transfer-row"><strong>'+h.data+'</strong> — '+h.cedente+' → '+h.receptor+' ('+h.tipo+')'+( h.obs?' — '+h.obs:'')+' </div>').join('')}</div>`:''}
     ${(s.dependentes||[]).length>0?`<div class="section"><div class="section-title">Dependentes (${s.dependentes.length})</div>${s.dependentes.map((d,i)=>'<div class="dep-card"><strong>'+sanitize(d.nome)+'</strong> · '+tipoDepLabel(d.tipoDep)+' · '+(d.dataNasc||'—')+' · Sexo: '+(d.sexo==='M'?'Masculino':'Feminino')+'</div>').join('')}</div>`:''}
   `;
 }
 
+let _fichaEditDirty=false;
+function voltarDaFicha(){
+  if(_fichaEditDirty && !confirm('Você tem alterações não salvas. Deseja descartar e voltar?')) return;
+  _fichaEditDirty=false;
+  showTab('socios');
+}
 function editarFicha(id){
   const s=socios.find(x=>String(x.id)===String(id));if(!s)return;
-  fichaEditId=id;
+  fichaEditId=id;_fichaEditDirty=false;
   document.getElementById('ficha-view').style.display='none';
   const edit=document.getElementById('ficha-edit');edit.style.display='block';
+  // Marca dirty em qualquer mudança nos campos de edição
+  setTimeout(()=>{
+    edit.querySelectorAll('input,select,textarea').forEach(el=>{
+      el.addEventListener('change',()=>{_fichaEditDirty=true;},{ once:false });
+      el.addEventListener('input',()=>{_fichaEditDirty=true;},{ once:false });
+    });
+  },200);
   edit.innerHTML=`
     <h2>Editar Socio — #${s.matricula}</h2>
     <div class="section"><div class="section-title">Dados Principais</div>
@@ -1575,9 +1646,16 @@ function editarFicha(id){
         <div class="field"><label>Status da Ficha</label><select id="e-statusficha"><option value="pendente" ${(s.statusFicha||'pendente')==='pendente'?'selected':''}>Pendente</option><option value="ok" ${s.statusFicha==='ok'?'selected':''}>OK</option></select></div>
       </div>
     </div>
+    <div class="section" style="margin-top:16px"><div class="section-title">Financeiro</div>
+      <div class="grid2">
+        <div class="field"><label>Último Pagamento</label><input id="e-ult-pagamento" type="date" value="${s.ultPagamento||''}"/></div>
+        <div class="field"><label>Meses em Aberto</label><input id="e-meses-aberto" type="number" min="0" value="${s.mesesAberto||0}"/></div>
+        <div class="field col2"><label>Obs. Financeira</label><input id="e-obs-financeiro" value="${s.obsFinanceiro||''}" placeholder="Ex: pagou 3 meses em 05/2025"/></div>
+      </div>
+    </div>
     <div style="display:flex;gap:10px;margin-top:8px">
       <button class="btn-primary" onclick="salvarEdicao()">Salvar</button>
-      <button class="btn-back" data-action="ficha" data-id="${s.id}">Cancelar</button>
+      <button class="btn-back" onclick="voltarDaFicha()">Cancelar</button>
     </div>`;
   // Preenche o campo de telefone separando prefixo e número
   setTimeout(() => preencherTelEdit(s.telefone || ''), 0);
@@ -1693,6 +1771,15 @@ async function editarSocioNoServidor(socio) {
       body: JSON.stringify(socio)
     });
     if (response.ok) {
+      // Normaliza o ID que o servidor possa ter retornado como número
+      try {
+        const salvo = await response.json();
+        if (salvo && salvo.id !== undefined) {
+          const idx = socios.findIndex(x => String(x.id) === String(socio.id));
+          if (idx !== -1) socios[idx].id = String(salvo.id);
+          socio.id = String(salvo.id);
+        }
+      } catch(e) { /* body vazio ou não-JSON — ignora */ }
       await carregarSocios();
       return true;
     }
@@ -1707,7 +1794,7 @@ async function editarSocioNoServidor(socio) {
         const salvo = await r2.json();
         // Atualiza ID no array local para o ID real do servidor
         const idx = socios.findIndex(x => String(x.id) === String(socio.id));
-        if (idx !== -1) socios[idx].id = salvo.id;
+        if (idx !== -1) socios[idx].id = String(salvo.id);
         try { localStorage.setItem(LOCAL_KEY, JSON.stringify(socios)); } catch(e) {}
         await carregarSocios();
         return true;
@@ -1730,6 +1817,8 @@ async function editarSocioNoServidor(socio) {
 async function salvarEdicao(){
   const s=socios.find(x=>String(x.id)===String(fichaEditId));
   if(!s)return;
+  // Snapshot dos valores ANTES das alterações para o diff de auditoria
+  const _snapshotAntes=Object.assign({},s);
 
   // Captura TODOS os campos do formulário de edição
   s.nome        = document.getElementById('e-nome').value.trim();
@@ -1762,10 +1851,21 @@ async function salvarEdicao(){
   // numTitulo removido — usa-se a matrícula como identificador único
   s.pastaDocumentos = document.getElementById('e-pasta')?.value.trim() || s.pastaDocumentos || '';
   s.obs         = document.getElementById('e-obs').value.trim();
+  s.ultPagamento  = document.getElementById('e-ult-pagamento')?.value || s.ultPagamento || '';
+  s.mesesAberto   = Number(document.getElementById('e-meses-aberto')?.value||0);
+  s.obsFinanceiro = (document.getElementById('e-obs-financeiro')?.value||'').trim();
 
   const ok = await editarSocioNoServidor(s);
   if (ok) {
-    registrarAuditoria('SOCIO_EDITADO', `Matrícula #${s.matricula} - ${s.nome}`);
+    const labeis={nome:'Nome',cpf:'CPF',rg:'RG',dataNasc:'Nasc.',sexo:'Sexo',estadoCivil:'Est.Civil',
+      telefone:'Tel',email:'E-mail',cep:'CEP',bairro:'Bairro',endereco:'Endereço',situacao:'Situação',
+      atividade:'Atividade',matricula:'Matrícula',presidente:'Presidente',obs:'Obs'};
+    const diffs=Object.keys(labeis).filter(k=>String(s[k]||'')!==String((_snapshotAntes||{})[k]||'')).map(k=>`${labeis[k]}: "${(_snapshotAntes||{})[k]||''}" → "${s[k]||''}"`);
+    const detalhe=`Matrícula #${s.matricula} - ${s.nome}`+(diffs.length?' | '+diffs.join('; '):'');
+    registrarAuditoria('SOCIO_EDITADO', detalhe);
+    // Garante que fichaEditId reflita o ID atual (pode ter mudado após 404→POST)
+    fichaEditId = String(s.id);
+    _fichaEditDirty = false;
     abrirFicha(fichaEditId);
     const m=document.getElementById('ficha-msg');
     if(m){m.className='alert ok';m.textContent='Dados atualizados!';m.style.display='block';setTimeout(()=>{m.style.display='none';},4000);}
@@ -1870,6 +1970,23 @@ function maskCPF(el) {
   else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
   else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2');
   el.value = v;
+  if (v.replace(/\D/g,'').length === 11) {
+    const ok = validarCPF(v);
+    el.style.borderColor = ok ? '#059669' : '#dc2626';
+    el.title = ok ? 'CPF válido' : 'CPF inválido — verifique os dígitos';
+  } else { el.style.borderColor = ''; el.title = ''; }
+}
+function validarCPF(cpf) {
+  const n = cpf.replace(/\D/g, '');
+  if (n.length !== 11 || /^(\d)\1+$/.test(n)) return false;
+  let s = 0;
+  for (let i = 0; i < 9; i++) s += Number(n[i]) * (10 - i);
+  let r = (s * 10) % 11; if (r === 10 || r === 11) r = 0;
+  if (r !== Number(n[9])) return false;
+  s = 0;
+  for (let i = 0; i < 10; i++) s += Number(n[i]) * (11 - i);
+  r = (s * 10) % 11; if (r === 10 || r === 11) r = 0;
+  return r === Number(n[10]);
 }
 
 function maskTel(el) {
@@ -1911,21 +2028,57 @@ async function buscarCEPEdit() {
   }
 }
 
-// ===== DELEGATED CLICK HANDLER =====
-// Substitui todos os onclick inline com s.id interpolado — elimina bugs de escaping
-document.addEventListener('click', function(e) {
-  const btn = e.target.closest('[data-action]');
-  if (!btn) return;
-  const action = btn.dataset.action;
-  const id = btn.dataset.id;
-  if (!id) return;
-  if (action === 'ficha')            abrirFicha(id);
-  else if (action === 'carteirinha') irCarteirinha(id);
-  else if (action === 'deletar')     deletarSocio(id);
-  else if (action === 'editar')      editarFicha(id);
-});
+// ===== EXPORTAÇÃO CSV (Melhoria 2) =====
+function exportarCSV(filtro) {
+  const hoje = new Date();
+  const mesMM = String(hoje.getMonth()+1).padStart(2,'0');
+  let lista = socios;
+  let nomeArq = 'BTC_Socios';
+  if (filtro === 'inadimplentes') {
+    lista = socios.filter(s => getSitNorm(s) === 'inadimplente');
+    nomeArq = 'BTC_Inadimplentes';
+  } else if (filtro === 'aniversariantes') {
+    lista = socios.filter(s => {
+      if (!s.dataNasc) return false;
+      const parts = s.dataNasc.split('-');
+      return parts.length >= 2 && parts[1] === mesMM;
+    });
+    nomeArq = 'BTC_Aniversariantes_'+mesMM;
+  }
+  const cols = ['matricula','nome','cpf','rg','dataNasc','sexo','estadoCivil','telefone','email',
+    'cep','bairro','endereco','tipoSocio','situacao','atividade','presidente','dataCadastro','obs'];
+  const header = cols.join(';');
+  const rows = lista.map(s => cols.map(c => {
+    const v = String(s[c]||'').replace(/"/g,'""').replace(/;/g,',');
+    return '"'+v+'"';
+  }).join(';'));
+  const csv = '\uFEFF' + header + '\n' + rows.join('\n'); // BOM para Excel BR
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nomeArq+'_'+hoje.toLocaleDateString('pt-BR').replace(/\//g,'-')+'.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  registrarAuditoria('BACKUP_EXPORTADO', 'CSV exportado: '+nomeArq+' ('+lista.length+' registros)');
+}
 
 // ===== INIT =====
+// ── Melhoria 8: Timeout de sessão por inatividade (30 min) ──
+let _inactivityTimer=null;
+const INACTIVITY_LIMIT=30*60*1000;
+function resetInactivityTimer(){
+  clearTimeout(_inactivityTimer);
+  if(!sessionStorage.getItem('btc_session')) return;
+  _inactivityTimer=setTimeout(()=>{
+    const resp=confirm('Você está inativo há 30 minutos.\nDeseja continuar logado?');
+    if(resp){ resetInactivityTimer(); }
+    else { doLogout(); }
+  },INACTIVITY_LIMIT);
+}
+['click','keydown','mousemove','touchstart'].forEach(ev=>
+  document.addEventListener(ev, resetInactivityTimer, {passive:true})
+);
 checkSession();
 </script>
 </body>
