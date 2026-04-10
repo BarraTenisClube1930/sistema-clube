@@ -1067,7 +1067,7 @@ function renderDeps(){
       <div style="margin-top:8px">
         <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">Foto 3x4</label>
         <div class="photo-box" id="prev-dep-${i}" onclick="document.getElementById('foto-dep-${i}').click()" style="width:75px;height:96px">
-          ${dep.foto?'<img src="'+dep.foto+'"/>':"Clique<br/>p/foto"}
+          ${dep.foto?'<img src="'+dep.foto+'"/>':`Clique<br/>p/foto`}
         </div>
         <input type="file" id="foto-dep-${i}" accept="image/*" style="display:none" onchange="previewFotoDep(event,${i})"/>
       </div>
@@ -1254,8 +1254,8 @@ function renderSocios(resetPag) {
           <span style="color:#9ca3af">${ecLabel(s.estadoCivil)} \u00b7 ${s.dependentes?.length||0} dep. \u00b7 Desde ${s.dataCadastro}</span>
         </div>
       </div>
-      <button class="btn-sm" onclick="abrirFicha('${s.id}')">Ficha</button>
-      <button class="btn-sm" onclick="irCarteirinha('${s.id}')">Carteirinha</button>
+      <button class="btn-sm" onclick="abrirFicha('${s.matricula}')">Ficha</button>
+      <button class="btn-sm" onclick="irCarteirinha('${s.matricula}')">Carteirinha</button>
       ${isAdmin() ? '<button class="btn-del" onclick="deletarSocio(\''+s.id+'\')">Excluir</button>' : ''}
     </div>`;}).join('')+(totalPags>1?paginacaoHtml:'');
 }
@@ -1295,8 +1295,8 @@ function showTab(name){
 }
 
 // ===== CARTEIRINHAS =====
-function irCarteirinha(id){
-  const s=socios.find(x=>String(x.id)===String(id));
+function irCarteirinha(mat){
+  const s=socios.find(x=>String(x.matricula)===String(mat));
   if(!s) return;
   showTab('carteirinhas');
   const inp=document.getElementById('cart-search');
@@ -1390,7 +1390,7 @@ function renderTitulos(){
           (s.historico||[]).map(h=>`<div class="transfer-row"><strong>${h.data}</strong> — ${h.cedente} → ${h.receptor} (${h.tipo||h.tipo}) ${h.obs?'<em>'+h.obs+'</em>':''}</div>`).join('')+
         '</div>':''}
       </div>
-      <button class="btn-sm" onclick="abrirFicha('${s.id}')">Ficha</button>
+      <button class="btn-sm" onclick="abrirFicha('${s.matricula}')">Ficha</button>
     </div>`).join('');
 }
 
@@ -1496,7 +1496,7 @@ function renderDashboard(){
 }
 
 // ===== FICHA =====
-function abrirFicha(id){const s=socios.find(x=>String(x.id)===String(id));if(!s)return;fichaEditId=id;showTab('ficha');renderFichaView(s);}
+function abrirFicha(mat){const s=socios.find(x=>String(x.matricula)===String(mat));if(!s)return;fichaEditId=s.id;showTab('ficha');renderFichaView(s);}
 
 function renderFichaView(s){
   document.getElementById('ficha-edit').style.display='none';
@@ -1515,8 +1515,8 @@ function renderFichaView(s){
         <div class="ficha-mat">${matLine}</div>
         <div style="margin-top:6px">${tipoTag(getTipoNorm(s))} ${sitTag(getSitNorm(s))}</div>
         <div class="ficha-actions">
-          ${isOperador() ? '<button class="btn-edit" onclick="editarFicha(\''+s.id+'\')">Editar</button>' : ''}
-          <button class="btn-sm" onclick="irCarteirinha('${s.id}')">Carteirinha</button>
+          ${isOperador() ? '<button class="btn-edit" onclick="editarFicha(\''+s.matricula+'\')">Editar</button>' : ''}
+          <button class="btn-sm" onclick="irCarteirinha('${s.matricula}')">Carteirinha</button>
           <button class="btn-back" onclick="voltarDaFicha()">← Voltar</button>
         </div>
       </div>
@@ -1568,9 +1568,9 @@ function voltarDaFicha(){
   _fichaEditDirty=false;
   showTab('socios');
 }
-function editarFicha(id){
-  const s=socios.find(x=>String(x.id)===String(id));if(!s)return;
-  fichaEditId=id;_fichaEditDirty=false;
+function editarFicha(mat){
+  const s=socios.find(x=>String(x.matricula)===String(mat));if(!s)return;
+  fichaEditId=s.id;_fichaEditDirty=false;
   document.getElementById('ficha-view').style.display='none';
   const edit=document.getElementById('ficha-edit');edit.style.display='block';
   // Marca dirty em qualquer mudança nos campos de edição
@@ -1708,10 +1708,14 @@ async function carregarSocios() {
       // Mescla planilha apenas para socios que NÃO estão no servidor
       // Compara por matrícula+nome para evitar duplicatas independente do tipo do ID
       const serverKeys = new Set(socios.map(s => s.matricula + '|' + s.nome.trim().toLowerCase()));
+      const serverIds  = new Set(socios.map(s => String(s.id)));
       PLANILHA_DATA.forEach(p => {
         const key = p.matricula + '|' + p.nome.trim().toLowerCase();
         if (!serverKeys.has(key)) {
-          socios.push({...p, id: String(p.id)});
+          // Garante ID único: se o ID da planilha já existe no servidor, usa prefixo para evitar colisão
+          const safeId = serverIds.has(String(p.id)) ? 'local_' + p.matricula : String(p.id);
+          socios.push({...p, id: safeId});
+          serverIds.add(safeId);
         }
       });
       try { localStorage.setItem(LOCAL_KEY, JSON.stringify(socios)); } catch(e) {}
@@ -1866,7 +1870,7 @@ async function salvarEdicao(){
     // Garante que fichaEditId reflita o ID atual (pode ter mudado após 404→POST)
     fichaEditId = String(s.id);
     _fichaEditDirty = false;
-    abrirFicha(fichaEditId);
+    abrirFicha(s.matricula);
     const m=document.getElementById('ficha-msg');
     if(m){m.className='alert ok';m.textContent='Dados atualizados!';m.style.display='block';setTimeout(()=>{m.style.display='none';},4000);}
   }
