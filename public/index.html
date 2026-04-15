@@ -53,7 +53,7 @@
     Última matrícula: <strong id="lbl-next-mat">#—</strong> · <span id="lbl-count">0</span> sócio(s)
     <div style="display:flex;gap:6px;margin-top:4px;justify-content:flex-end;flex-wrap:wrap">
       <button onclick="exportarBackup()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.4);color:white;padding:3px 9px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;" title="Salvar todos os dados num arquivo JSON">Exportar</button>
-      <label style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.4);color:white;padding:3px 9px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;" title="Carregar dados de um arquivo JSON">Importar<input type="file" accept=".json" onchange="importarBackup(event)" style="display:none"/></label>
+      <label id="btn-importar-wrap" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.4);color:white;padding:3px 9px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;display:none" title="Carregar dados de um arquivo JSON">Importar<input type="file" accept=".json" onchange="importarBackup(event)" style="display:none"/></label>
     </div>
     <div class="sync-status online" id="sync-status">
       <div class="sync-dot online"></div>
@@ -325,7 +325,6 @@
   <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
     <button class="btn-outline" style="font-size:12px;padding:5px 10px" onclick="exportarCSV('todos')">⬇ CSV Completo</button>
     <button class="btn-outline" style="font-size:12px;padding:5px 10px;border-color:#dc2626;color:#dc2626" onclick="exportarCSV('inadimplentes')">⬇ CSV Inadimplentes</button>
-    <button class="btn-outline" style="font-size:12px;padding:5px 10px;border-color:#059669;color:#059669" onclick="exportarCSV('aniversariantes')">⬇ CSV Aniversariantes do Mês</button>
   </div>
   <input class="search-input" id="search-input" type="text" placeholder="Buscar por nome, matricula, CPF ou no titulo..." oninput="renderSocios()"/>
   <div id="socios-list"></div>
@@ -364,24 +363,77 @@
 
 <!-- ===== DASHBOARD ===== -->
 <div id="tab-dashboard" class="content" style="display:none">
-  <h2>Dashboard — Visao Geral dos Socios</h2>
+  <div class="dash-header">
+    <div>
+      <h2 style="margin:0">Dashboard — Visão Geral dos Sócios</h2>
+      <div id="dash-timestamp" class="dash-ts"></div>
+    </div>
+    <div class="dash-header-actions">
+      <button class="btn-outline" style="font-size:12px;padding:6px 12px" onclick="imprimirDashboard()">🖨 Imprimir / PDF</button>
+      <button class="btn-outline" style="font-size:12px;padding:6px 12px" onclick="renderDashboard()">🔄 Atualizar</button>
+    </div>
+  </div>
   <div id="dash-empty" style="display:none" class="empty">Cadastre sócios para ver o dashboard.</div>
   <div id="dash-content">
-    <div class="dash-grid" id="kpi-row"></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-      <div class="section"><div class="section-title">Tipo de Socio</div><div id="chart-tipo"></div></div>
-      <div class="section"><div class="section-title">Situacao</div><div id="chart-sit"></div></div>
+
+    <!-- Resumo Executivo -->
+    <div class="section dash-exec">
+      <div class="section-title">Resumo Executivo</div>
+      <div id="dash-exec-text"></div>
     </div>
+
+    <!-- Alertas de qualidade (quando houver) -->
+    <div id="dash-alertas"></div>
+
+    <!-- KPIs principais -->
+    <div class="dash-grid" id="kpi-row"></div>
+
+    <!-- Distribuição por tipo/situação -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+      <div class="section"><div class="section-title">Tipo de Sócio</div><div id="chart-tipo"></div></div>
+      <div class="section"><div class="section-title">Situação</div><div id="chart-sit"></div></div>
+    </div>
+
+    <!-- Demografia -->
+    <div class="section" style="margin-bottom:16px">
+      <div class="section-title">Pirâmide Etária</div>
+      <div id="chart-idade"></div>
+      <div id="idade-obs" class="dash-obs"></div>
+    </div>
+
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
       <div class="section"><div class="section-title">Por Sexo</div><div id="chart-sexo"></div></div>
       <div class="section"><div class="section-title">Estado Civil</div><div id="chart-estcivil"></div></div>
     </div>
+
+    <!-- Geografia -->
+    <div class="section" style="margin-bottom:16px">
+      <div class="section-title">Distribuição por Bairro (Top 10)</div>
+      <div id="chart-bairro"></div>
+    </div>
+
+    <!-- Evolução temporal -->
+    <div class="section" style="margin-bottom:16px">
+      <div class="section-title">Evolução de Cadastros por Ano</div>
+      <div id="chart-evolucao"></div>
+      <div id="evolucao-obs" class="dash-obs"></div>
+    </div>
+
+    <!-- Engajamento -->
     <div class="section" style="margin-bottom:16px"><div class="section-title">Atividades Mais Praticadas</div><div id="chart-ativ"></div></div>
     <div class="section" style="margin-bottom:16px"><div class="section-title">Dependentes</div><div id="chart-deps"></div></div>
+
+    <!-- Gestão -->
     <div class="section" style="margin-bottom:16px"><div class="section-title">Proprietários Aprovados por Presidente</div><div id="chart-pres-props"></div></div>
     <div class="section" style="margin-bottom:16px"><div class="section-title">Remidos por Presidente</div><div id="chart-pres-remidos"></div></div>
     <div class="section" style="margin-bottom:16px"><div class="section-title">Total de Sócios por Presidente</div><div id="chart-pres-total"></div></div>
+
+    <!-- Qualidade de dados -->
     <div class="section" style="margin-bottom:32px"><div class="section-title">Completude do Cadastro (campos faltando)</div><div id="chart-completude"></div></div>
+
+    <div class="dash-footer">
+      Relatório gerado automaticamente pelo Sistema BTC · <span id="dash-ts-footer"></span>
+    </div>
   </div>
 </div>
 

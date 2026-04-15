@@ -244,6 +244,9 @@ function aplicarPermissoes() {
   // Aba "Novo Cadastro": só admin e operador
   const tabCadastro = document.querySelector('.tab-btn[onclick*="cadastro"]');
   if (tabCadastro) tabCadastro.style.display = isOperador() ? '' : 'none';
+  // Botão Importar: só admin (operação perigosa, pode sobrescrever dados)
+  const btnImportar = document.getElementById('btn-importar-wrap');
+  if (btnImportar) btnImportar.style.display = isAdmin() ? 'inline-flex' : 'none';
   // Badge de papel no header
   const lblUser = document.getElementById('lbl-user');
   if (lblUser) {
@@ -332,39 +335,6 @@ function updateHeader(){
   const m=getUltimaMatricula();
   document.getElementById('lbl-next-mat').textContent=m>0?'#'+m:'nenhuma';
   document.getElementById('lbl-count').textContent=socios.length;
-  renderAniversariantes();
-}
-function renderAniversariantes(){
-  let el=document.getElementById('aniversariantes-banner');
-  if(!el){
-    el=document.createElement('div');
-    el.id='aniversariantes-banner';
-    el.style.cssText='background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;padding:10px 16px;margin:8px 16px 0;font-size:13px;color:#92400e;display:none';
-    const tabs=document.querySelector('.tabs');
-    if(tabs && tabs.nextSibling) tabs.parentNode.insertBefore(el, tabs.nextSibling);
-  }
-  const hoje=new Date();
-  const mm=String(hoje.getMonth()+1).padStart(2,'0');
-  const dd=String(hoje.getDate()).padStart(2,'0');
-  const em7=new Date(hoje.getTime()+7*86400000);
-  const aniv=socios.filter(s=>{
-    if(!s.dataNasc) return false;
-    const parts=s.dataNasc.split('-');
-    if(parts.length<3) return false;
-    const bMM=parts[1], bDD=parts[2];
-    for(let d=0;d<7;d++){
-      const dt=new Date(hoje.getTime()+d*86400000);
-      if(String(dt.getMonth()+1).padStart(2,'0')===bMM && String(dt.getDate()).padStart(2,'0')===bDD) return true;
-    }
-    return false;
-  });
-  if(aniv.length){
-    el.style.display='block';
-    el.innerHTML='🎂 <strong>Aniversariantes nos próximos 7 dias:</strong> '+aniv.map(s=>{
-      const [,bMM,bDD]=s.dataNasc.split('-');
-      return '<strong>'+s.nome.split(' ')[0]+'</strong> ('+bDD+'/'+bMM+')';
-    }).join(' · ');
-  } else { el.style.display='none'; }
 }
 
 // ===== CEP =====
@@ -631,7 +601,7 @@ function renderSocios(resetPag) {
           <span style="color:#9ca3af">${ecLabel(s.estadoCivil)} \u00b7 ${s.dependentes?.length||0} dep. \u00b7 Desde ${sanitize(s.dataCadastro)}</span>
         </div>
       </div>
-      <button class="btn-sm" onclick="abrirFicha('${matAttr}')">Ficha</button>
+      <button class="btn-sm" onclick="abrirFicha('${idAttr}')">Ficha</button>
       <button class="btn-sm" onclick="irCarteirinha('${matAttr}')">Carteirinha</button>
       ${isAdmin() ? '<button class="btn-del" onclick="deletarSocio(\''+idAttr+'\')">Excluir</button>' : ''}
     </div>`;}).join('')+(totalPags>1?paginacaoHtml:'');
@@ -758,16 +728,16 @@ function renderTitulos(){
   if(!filtered.length){list.innerHTML='<div class="empty">Nenhum resultado.</div>';return;}
   list.innerHTML=filtered.map(s=>`
     <div class="titulo-row">
-      <div class="titulo-num">#${s.matricula||'—'}</div>
+      <div class="titulo-num">#${sanitize(String(s.matricula||'—'))}</div>
       <div style="flex:1">
-        <div style="font-weight:700;color:var(--navy)">${s.nome}</div>
-        <div style="font-size:12px;color:var(--gray)">Matrícula #${s.matricula} · CPF: ${s.cpf} · ${sitTag(getSitNorm(s))}</div>
-        <div style="font-size:11px;color:#9ca3af;margin-top:3px">Origem: ${s.origemTitulo||'—'} · Desde: ${s.dataTitulo||s.dataCadastro}</div>
+        <div style="font-weight:700;color:var(--navy)">${sanitize(s.nome)}</div>
+        <div style="font-size:12px;color:var(--gray)">Matrícula #${sanitize(String(s.matricula))} · CPF: ${sanitize(s.cpf||'')} · ${sitTag(getSitNorm(s))}</div>
+        <div style="font-size:11px;color:#9ca3af;margin-top:3px">Origem: ${sanitize(s.origemTitulo||'—')} · Desde: ${sanitize(s.dataTitulo||s.dataCadastro||'')}</div>
         ${(s.historico||[]).length>0?'<div style="margin-top:8px">'+
-          (s.historico||[]).map(h=>`<div class="transfer-row"><strong>${h.data}</strong> — ${h.cedente} → ${h.receptor} (${h.tipo||h.tipo}) ${h.obs?'<em>'+h.obs+'</em>':''}</div>`).join('')+
+          (s.historico||[]).map(h=>`<div class="transfer-row"><strong>${sanitize(h.data||'')}</strong> — ${sanitize(h.cedente||'')} → ${sanitize(h.receptor||'')} (${sanitize(h.tipo||'')}) ${h.obs?'<em>'+sanitize(h.obs)+'</em>':''}</div>`).join('')+
         '</div>':''}
       </div>
-      <button class="btn-sm" onclick="abrirFicha('${s.matricula}')">Ficha</button>
+      <button class="btn-sm" onclick="abrirFicha('${escAttr(s.id)}')">Ficha</button>
     </div>`).join('');
 }
 
@@ -796,6 +766,13 @@ function renderDashboard(){
   const cont=document.getElementById('dash-content');
   if(!socios.length){empty.style.display='block';cont.style.display='none';return;}
   empty.style.display='none';cont.style.display='block';
+
+  // Timestamp de geração — transparência para apresentação ao conselho
+  const agora=new Date();
+  const ts='Relatório gerado em '+agora.toLocaleDateString('pt-BR')+' às '+agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  const tsEl=document.getElementById('dash-timestamp');if(tsEl)tsEl.textContent=ts;
+  const tsFt=document.getElementById('dash-ts-footer');if(tsFt)tsFt.textContent=ts;
+
   const total=socios.length;
   const props=socios.filter(s=>getTipoNorm(s)==='proprietario').length;
   const remidos=socios.filter(s=>getTipoNorm(s)==='remido').length;
@@ -807,13 +784,14 @@ function renderDashboard(){
   const mulheres=socios.filter(s=>s.sexo==='F').length;
   const homens=socios.filter(s=>s.sexo==='M').length;
   const ativos=socios.filter(s=>getSitNorm(s)==='ativo').length;
+  const suspensos=socios.filter(s=>getSitNorm(s)==='suspenso').length;
+  const desligados=socios.filter(s=>getSitNorm(s)==='desligado').length;
   const inadimplentes=socios.filter(s=>getSitNorm(s)==='inadimplente').length;
   const totalDeps=socios.reduce((a,s)=>a+(s.dependentes?.length||0),0);
   const comDeps=socios.filter(s=>s.dependentes?.length>0).length;
+
   // Presidentes stats
-  const presCount={};
-  const presProps={};
-  const presRemidos={};
+  const presCount={}, presProps={}, presRemidos={};
   socios.forEach(s=>{
     const p=s.presidente;if(!p)return;
     presCount[p]=(presCount[p]||0)+1;
@@ -821,21 +799,106 @@ function renderDashboard(){
     if(getTipoNorm(s)==='remido') presRemidos[p]=(presRemidos[p]||0)+1;
   });
 
-  document.getElementById('kpi-row').innerHTML=[
-    {num:total,label:'Total de Sócios'},
-    {num:props,label:'Proprietários'},
-    {num:remidos,label:'Remidos'},
-    {num:benemeritos,label:'Beneméritos'},
-    {num:conts,label:'Contribuintes'},
-    {num:naoSocios,label:'Não Sócios'},
-    {num:inativos,label:'Inativos'},
-    {num:ativos,label:'Ativos'},
-    {num:totalDeps,label:'Dependentes'},
-  ].map(k=>`<div class="kpi-card"><div class="kpi-num">${k.num}</div><div class="kpi-label">${k.label}</div></div>`).join('');
+  // Idade: calcula faixas etárias
+  function idadeDe(ds){
+    if(!ds) return null;
+    const [y,m,d]=ds.split('-').map(Number);
+    if(!y||!m||!d) return null;
+    const hj=new Date(), nasc=new Date(y,m-1,d);
+    let i=hj.getFullYear()-nasc.getFullYear();
+    if(hj.getMonth()<nasc.getMonth()||(hj.getMonth()===nasc.getMonth()&&hj.getDate()<nasc.getDate())) i--;
+    return (i>=0&&i<=120)?i:null;
+  }
+  const idades=socios.map(s=>idadeDe(s.dataNasc)).filter(i=>i!==null);
+  const faixas={'0-17':0,'18-30':0,'31-50':0,'51-70':0,'71+':0};
+  idades.forEach(i=>{
+    if(i<=17)faixas['0-17']++;
+    else if(i<=30)faixas['18-30']++;
+    else if(i<=50)faixas['31-50']++;
+    else if(i<=70)faixas['51-70']++;
+    else faixas['71+']++;
+  });
+  const idadeMedia=idades.length?Math.round(idades.reduce((a,b)=>a+b,0)/idades.length):null;
+  const semDataNasc=total-idades.length;
 
-  function bar(id,data){
+  // Bairros
+  const bairros={};
+  socios.forEach(s=>{if(s.bairro){const b=s.bairro.trim();if(b)bairros[b]=(bairros[b]||0)+1;}});
+
+  // Evolução por ano de cadastro
+  const porAno={};
+  socios.forEach(s=>{
+    const d=s.dataCadastro||'';
+    const m=d.match(/(\d{4})/);
+    if(m){porAno[m[1]]=(porAno[m[1]]||0)+1;}
+  });
+  const anos=Object.keys(porAno).sort();
+  const anoMaisAtivo=anos.reduce((m,a)=>(porAno[a]>(porAno[m]||0)?a:m),anos[0]);
+
+  // Completude de dados
+  const semCPF=socios.filter(s=>!s.cpf||s.cpf==='').length;
+  const semTel=socios.filter(s=>!(s.tel||s.telefone)).length;
+  const semEnd=socios.filter(s=>!s.endereco).length;
+  const semEmail=socios.filter(s=>!s.email).length;
+  const semBairro=socios.filter(s=>!s.bairro).length;
+  const pctCompleto=Math.round(((total-semCPF)/total)*100);
+
+  // ===== RESUMO EXECUTIVO (em prosa, auto-gerado) =====
+  const execEl=document.getElementById('dash-exec-text');
+  if(execEl){
+    const pctAtivos=Math.round((ativos/total)*100);
+    const pctProps=Math.round((props/total)*100);
+    const pctInad=Math.round((inadimplentes/total)*100);
+    const topBairro=Object.entries(bairros).sort((a,b)=>b[1]-a[1])[0];
+    const topPres=Object.entries(presCount).sort((a,b)=>b[1]-a[1])[0];
+    execEl.innerHTML=`
+      <p>O clube possui atualmente <strong>${total} sócios cadastrados</strong>, dos quais <strong>${ativos} estão ativos (${pctAtivos}%)</strong>${suspensos?`, ${suspensos} suspensos`:''}${desligados?`, ${desligados} desligados`:''}${inadimplentes?` e ${inadimplentes} inadimplentes (${pctInad}%)`:''}.</p>
+      <p>Do quadro associativo, <strong>${props} são proprietários de título (${pctProps}%)</strong>, ${remidos} remidos, ${benemeritos} beneméritos e ${conts} contribuintes. Há ainda ${naoSocios} não-sócios frequentadores e ${inativos} inativos. O sistema contabiliza <strong>${totalDeps} dependentes</strong> vinculados a ${comDeps} titulares.</p>
+      ${idadeMedia?`<p>A idade média dos sócios é de <strong>${idadeMedia} anos</strong>. A maior concentração está na faixa de ${Object.entries(faixas).sort((a,b)=>b[1]-a[1])[0][0]} anos (${Object.entries(faixas).sort((a,b)=>b[1]-a[1])[0][1]} pessoas).${semDataNasc?` <em>${semDataNasc} sócios não têm data de nascimento informada e ficam fora dessa análise.</em>`:''}</p>`:''}
+      ${topBairro?`<p>Geograficamente, o maior bairro de origem é <strong>${sanitize(topBairro[0])}</strong> com ${topBairro[1]} sócios (${Math.round((topBairro[1]/total)*100)}% do total).</p>`:''}
+      ${topPres?`<p>Na gestão histórica, <strong>${sanitize(topPres[0])}</strong> foi o presidente com o maior número de sócios registrados sob sua gestão (${topPres[1]} sócios).</p>`:''}
+      ${anos.length?`<p>Os cadastros vão de <strong>${anos[0]}</strong> a <strong>${anos[anos.length-1]}</strong>, com pico em ${anoMaisAtivo} (${porAno[anoMaisAtivo]} cadastros).</p>`:''}
+      <p style="font-size:12px;color:var(--gray);margin-top:10px"><em>Base: ${total} registros · Integridade: ${pctCompleto}% dos registros com CPF preenchido.</em></p>
+    `;
+  }
+
+  // ===== ALERTAS DE QUALIDADE =====
+  const alertasEl=document.getElementById('dash-alertas');
+  if(alertasEl){
+    const alertas=[];
+    if(inadimplentes>0) alertas.push({tipo:'critico',icon:'⚠️',titulo:'Inadimplência',texto:`${inadimplentes} sócio(s) inadimplente(s) (${Math.round((inadimplentes/total)*100)}% da base).`});
+    if(semCPF>total*0.1) alertas.push({tipo:'atencao',icon:'📋',titulo:'CPF faltante',texto:`${semCPF} sócios (${Math.round((semCPF/total)*100)}%) sem CPF cadastrado.`});
+    if(semTel>total*0.2) alertas.push({tipo:'atencao',icon:'📞',titulo:'Contato faltante',texto:`${semTel} sócios sem telefone registrado — dificulta comunicação com o quadro.`});
+    if(semDataNasc>total*0.15) alertas.push({tipo:'info',icon:'📅',titulo:'Data de nascimento',texto:`${semDataNasc} sócios sem data de nascimento — impossibilita análise etária precisa.`});
+    if(idadeMedia && idadeMedia>=60) alertas.push({tipo:'info',icon:'👥',titulo:'Perfil etário',texto:`Idade média de ${idadeMedia} anos sugere atenção à renovação do quadro associativo.`});
+    if(!alertas.length) alertas.push({tipo:'info',icon:'✅',titulo:'Base saudável',texto:'Nenhum alerta crítico identificado nos dados atuais.'});
+    alertasEl.innerHTML=alertas.map(a=>`<div class="dash-alerta ${a.tipo}"><span class="dash-alerta-icon">${a.icon}</span><div><strong>${a.titulo}:</strong> ${a.texto}</div></div>`).join('');
+  }
+
+  // ===== KPIs (com drill-down) =====
+  // Clicar leva à aba Sócios com filtro aplicado
+  document.getElementById('kpi-row').innerHTML=[
+    {num:total,label:'Total de Sócios',filtro:''},
+    {num:props,label:'Proprietários',filtro:'proprietario'},
+    {num:remidos,label:'Remidos',filtro:'remido'},
+    {num:benemeritos,label:'Beneméritos',filtro:'benemerito'},
+    {num:conts,label:'Contribuintes',filtro:'contribuinte'},
+    {num:naoSocios,label:'Não Sócios',filtro:'nao'},
+    {num:ativos,label:'Ativos',filtro:'ativo'},
+    {num:inadimplentes,label:'Inadimplentes',filtro:'inadimplente'},
+    {num:totalDeps,label:'Dependentes',filtro:''},
+  ].map(k=>`<div class="kpi-card" onclick="drillKpi('${escAttr(k.filtro)}')" title="${k.filtro?'Clique para filtrar sócios':'Total geral'}"><div class="kpi-num">${k.num}</div><div class="kpi-label">${k.label}</div></div>`).join('');
+
+  // ===== GRÁFICOS =====
+  function bar(id,data,baseTotal){
+    const el=document.getElementById(id);if(!el)return;
+    const base=baseTotal||total;
     const max=Math.max(...data.map(d=>d.v),1);
-    document.getElementById(id).innerHTML=data.length?data.map(d=>{const w=Math.round((d.v/max)*100);const p=Math.round((d.v/total)*100);return`<div class="bar-row"><div class="bar-lbl" title="${d.l}">${d.l}</div><div class="bar-bg"><div class="bar-fill" style="width:${w}%"><span class="bar-val">${d.v}</span></div></div><span class="bar-pct">${p}%</span></div>`;}).join(''):'<p style="color:#9ca3af;font-size:13px">Sem dados.</p>';
+    el.innerHTML=data.length?data.map(d=>{
+      const w=Math.round((d.v/max)*100);
+      const p=base?Math.round((d.v/base)*100):0;
+      return`<div class="bar-row"><div class="bar-lbl" title="${sanitize(d.l)}">${sanitize(d.l)}</div><div class="bar-bg"><div class="bar-fill" style="width:${w}%"><span class="bar-val">${d.v}</span></div></div><span class="bar-pct">${p}%</span></div>`;
+    }).join(''):'<p style="color:#9ca3af;font-size:13px">Sem dados.</p>';
   }
 
   bar('chart-tipo',[
@@ -851,29 +914,69 @@ function renderDashboard(){
 
   const sitMap={ativo:'Ativo',suspenso:'Suspenso',inadimplente:'Inadimplente',desligado:'Desligado'};
   bar('chart-sit',Object.entries(sitMap).map(([k,l])=>({l,v:socios.filter(s=>getSitNorm(s)===k).length})).filter(d=>d.v>0));
-  bar('chart-sexo',[{l:'Masculino',v:homens},{l:'Feminino',v:mulheres}]);
-  const ec={};socios.forEach(s=>{const k={solteiro:'Solteiro(a)',casado:'Casado(a)',uniaoEstavel:'União Estável',divorciado:'Divorciado(a)',viuvo:'Viúvo(a)'}[s.estadoCivil]||s.estadoCivil||'N/I';ec[k]=(ec[k]||0)+1;});
+
+  // Pirâmide etária
+  bar('chart-idade',Object.entries(faixas).map(([l,v])=>({l:l+' anos',v})).filter(d=>d.v>0),idades.length);
+  const obsIdade=document.getElementById('idade-obs');
+  if(obsIdade){
+    obsIdade.textContent=idades.length
+      ?`Idade média: ${idadeMedia} anos · Base: ${idades.length} sócios com data de nascimento informada${semDataNasc?` (${semDataNasc} registros sem data foram excluídos)`:''}.`
+      :'Nenhum sócio tem data de nascimento cadastrada.';
+  }
+
+  bar('chart-sexo',[{l:'Masculino',v:homens},{l:'Feminino',v:mulheres}].filter(d=>d.v>0));
+
+  const ec={};socios.forEach(s=>{const k={solteiro:'Solteiro(a)',casado:'Casado(a)',uniaoEstavel:'União Estável',divorciado:'Divorciado(a)',viuvo:'Viúvo(a)'}[s.estadoCivil]||s.estadoCivil||'Não informado';ec[k]=(ec[k]||0)+1;});
   bar('chart-estcivil',Object.entries(ec).sort((a,b)=>b[1]-a[1]).map(([l,v])=>({l,v})));
+
+  // Bairros (top 10)
+  bar('chart-bairro',Object.entries(bairros).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([l,v])=>({l,v})));
+
+  // Evolução por ano
+  bar('chart-evolucao',anos.map(a=>({l:a,v:porAno[a]})));
+  const obsEvo=document.getElementById('evolucao-obs');
+  if(obsEvo){
+    obsEvo.textContent=anos.length
+      ?`Período: ${anos[0]} a ${anos[anos.length-1]} · Pico: ${anoMaisAtivo} (${porAno[anoMaisAtivo]} cadastros).`
+      :'Sem datas de cadastro disponíveis para análise temporal.';
+  }
+
   const ac={};socios.forEach(s=>{const a=(s.atividade||'Não informado').split(/[,;\/]/);a.forEach(x=>{const k=x.trim()||'Não informado';ac[k]=(ac[k]||0)+1;});});
   bar('chart-ativ',Object.entries(ac).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([l,v])=>({l,v})));
   bar('chart-deps',[{l:'Com dependentes',v:comDeps},{l:'Sem dependentes',v:total-comDeps}]);
-  // Presidentes que mais aprovaram títulos
+
   bar('chart-pres-props',Object.entries(presProps).sort((a,b)=>b[1]-a[1]).slice(0,15).map(([l,v])=>({l,v})));
   bar('chart-pres-remidos',Object.entries(presRemidos).sort((a,b)=>b[1]-a[1]).map(([l,v])=>({l,v})));
   bar('chart-pres-total',Object.entries(presCount).sort((a,b)=>b[1]-a[1]).slice(0,15).map(([l,v])=>({l,v})));
-  // Obs completude
-  const semCPF=socios.filter(s=>!s.cpf||s.cpf==='').length;
-  const semTel=socios.filter(s=>!(s.tel||s.telefone)).length;
-  const semEnd=socios.filter(s=>!s.endereco).length;
+
   bar('chart-completude',[
-    {l:'Sem CPF/RG',v:semCPF},
+    {l:'Sem CPF',v:semCPF},
     {l:'Sem Telefone',v:semTel},
     {l:'Sem Endereço',v:semEnd},
-  ]);
+    {l:'Sem E-mail',v:semEmail},
+    {l:'Sem Bairro',v:semBairro},
+    {l:'Sem Data Nasc.',v:semDataNasc},
+  ].filter(d=>d.v>0));
+}
+
+// Drill-down: clicar num KPI leva à aba Sócios com busca aplicada
+function drillKpi(filtro){
+  if(!filtro){showTab('socios');return;}
+  showTab('socios');
+  const inp=document.getElementById('search-input');
+  if(inp){inp.value=filtro;renderSocios();}
+}
+
+// Imprimir dashboard (usa impressão nativa do navegador — permite salvar como PDF)
+function imprimirDashboard(){
+  showTab('dashboard');
+  renderDashboard();
+  setTimeout(()=>window.print(),300);
 }
 
 // ===== FICHA =====
-function abrirFicha(mat){const s=socios.find(x=>String(x.matricula)===String(mat));if(!s)return;fichaEditId=s.id;showTab('ficha');renderFichaView(s);}
+// Busca por ID único (não por matrícula, que pode ter duplicatas no banco)
+function abrirFicha(id){const s=socios.find(x=>String(x.id)===String(id));if(!s)return;fichaEditId=s.id;showTab('ficha');renderFichaView(s);}
 
 function renderFichaView(s){
   document.getElementById('ficha-edit').style.display='none';
@@ -892,8 +995,8 @@ function renderFichaView(s){
         <div class="ficha-mat">${matLine}</div>
         <div style="margin-top:6px">${tipoTag(getTipoNorm(s))} ${sitTag(getSitNorm(s))}</div>
         <div class="ficha-actions">
-          ${isOperador() ? '<button class="btn-edit" onclick="editarFicha(\''+s.matricula+'\')">Editar</button>' : ''}
-          <button class="btn-sm" onclick="irCarteirinha('${s.matricula}')">Carteirinha</button>
+          ${isOperador() ? '<button class="btn-edit" onclick="editarFicha(\''+escAttr(s.id)+'\')">Editar</button>' : ''}
+          <button class="btn-sm" onclick="irCarteirinha('${escAttr(s.matricula)}')">Carteirinha</button>
           <button class="btn-back" onclick="voltarDaFicha()">← Voltar</button>
         </div>
       </div>
@@ -945,8 +1048,8 @@ function voltarDaFicha(){
   _fichaEditDirty=false;
   showTab('socios');
 }
-function editarFicha(mat){
-  const s=socios.find(x=>String(x.matricula)===String(mat));if(!s)return;
+function editarFicha(id){
+  const s=socios.find(x=>String(x.id)===String(id));if(!s)return;
   fichaEditId=s.id;_fichaEditDirty=false;
   document.getElementById('ficha-view').style.display='none';
   const edit=document.getElementById('ficha-edit');edit.style.display='block';
@@ -1247,7 +1350,7 @@ async function salvarEdicao(){
     // Garante que fichaEditId reflita o ID atual (pode ter mudado após 404→POST)
     fichaEditId = String(s.id);
     _fichaEditDirty = false;
-    abrirFicha(s.matricula);
+    abrirFicha(s.id);
     const m=document.getElementById('ficha-msg');
     if(m){m.className='alert ok';m.textContent='Dados atualizados!';m.style.display='block';setTimeout(()=>{m.style.display='none';},4000);}
   }
@@ -1412,19 +1515,11 @@ async function buscarCEPEdit() {
 // ===== EXPORTAÇÃO CSV (Melhoria 2) =====
 function exportarCSV(filtro) {
   const hoje = new Date();
-  const mesMM = String(hoje.getMonth()+1).padStart(2,'0');
   let lista = socios;
   let nomeArq = 'BTC_Socios';
   if (filtro === 'inadimplentes') {
     lista = socios.filter(s => getSitNorm(s) === 'inadimplente');
     nomeArq = 'BTC_Inadimplentes';
-  } else if (filtro === 'aniversariantes') {
-    lista = socios.filter(s => {
-      if (!s.dataNasc) return false;
-      const parts = s.dataNasc.split('-');
-      return parts.length >= 2 && parts[1] === mesMM;
-    });
-    nomeArq = 'BTC_Aniversariantes_'+mesMM;
   }
   const cols = ['matricula','nome','cpf','rg','dataNasc','sexo','estadoCivil','telefone','email',
     'cep','bairro','endereco','tipoSocio','situacao','atividade','presidente','dataCadastro','obs'];
