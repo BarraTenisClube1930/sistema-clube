@@ -89,20 +89,22 @@ h2{color:var(--navy);font-size:18px;margin-bottom:16px}
 
 /* CARTEIRINHA */
 .card-wrap{display:flex;flex-wrap:wrap;gap:14px;padding:16px;background:#f1f5f9;border-radius:8px;border:1px solid var(--border)}
-.btc-card{width:290px;height:188px;border:2.5px solid #1B3A70;border-radius:4px;background:#fff;position:relative;flex-shrink:0;font-family:Arial,Helvetica,sans-serif;overflow:hidden}
-.btc-top{background:#C8DCF0;position:relative;border-bottom:2px solid #1B3A70;display:flex;flex-direction:column;overflow:visible}
+/* Carteirinha — proporção CR-80 (85.6×54mm) */
+.btc-card{width:296px;height:187px;border:2px solid #1B3A70;border-radius:6px;background:#fff;position:relative;flex-shrink:0;font-family:Arial,Helvetica,sans-serif;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.btc-top{background:#C8DCF0;position:relative;border-bottom:2px solid #1B3A70;display:flex;flex-direction:column;overflow:hidden;height:116px;flex-shrink:0}
 /* Zona 1: cabeçalho com info do clube + foto lado a lado */
 .btc-header-zone{display:flex;justify-content:space-between;align-items:flex-start;padding:6px 7px 4px 7px;position:relative;z-index:4}
 .btc-club-block{flex:1}
 .btc-club-name{color:#1B3A70;font-weight:bold;font-size:8px;margin-top:3px;line-height:1.3}
 .btc-club-info{color:#1B3A70;font-size:6.5px;line-height:1.55}
-.btc-photo{width:63px;height:90px;border:1.5px solid #1B3A70;background:#e5e7eb;flex-shrink:0;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:9px;color:#888;font-weight:bold;text-align:center}
+/* Foto — proporção correta para a carteirinha */
+.btc-photo{width:58px;height:78px;border:1.5px solid #1B3A70;background:#e5e7eb;flex-shrink:0;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:8px;color:#888;font-weight:bold;text-align:center;margin-top:1px}
 .btc-photo img{width:100%;height:100%;object-fit:cover}
-/* Zona 2: faixa diagonal — fica ENTRE o cabeçalho e a área inferior */
+/* Faixa diagonal — sem borda nas extremidades */
 .btc-stripe-zone{position:relative;height:18px;overflow:hidden;margin:0}
-.btc-stripe{position:absolute;left:-20px;right:-20px;top:4px;background:#1B3A70;padding:3px 0;transform:rotate(-3deg);color:#fff;font-size:6.5px;font-weight:bold;letter-spacing:1.5px;text-align:center;z-index:3;width:120%}
-.btc-body{padding:5px 8px 18px 8px;font-size:9px;color:#111;line-height:1.8}
-.btc-footer{position:absolute;bottom:0;left:0;right:0;border-top:1.5px solid #1B3A70;background:#fff;text-align:center;padding:3px;color:#1B3A70;font-weight:bold;font-size:7px;letter-spacing:.8px}
+.btc-stripe{position:absolute;left:-35px;right:-35px;top:3px;background:#1B3A70;padding:3.5px 0;transform:rotate(-3deg);color:#fff;font-size:6.5px;font-weight:bold;letter-spacing:1.5px;text-align:center;z-index:3;pointer-events:none}
+.btc-body{padding:4px 8px 16px 8px;font-size:9px;color:#111;line-height:1.75}
+.btc-footer{position:absolute;bottom:0;left:0;right:0;border-top:1.5px solid #1B3A70;background:#fff;text-align:center;padding:2px 4px;color:#1B3A70;font-weight:bold;font-size:6.5px;letter-spacing:.6px;white-space:nowrap;overflow:hidden}
 
 /* DASHBOARD */
 .dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:16px}
@@ -167,9 +169,11 @@ h2{color:var(--navy);font-size:18px;margin-bottom:16px}
 
 @media print{
   body>*{display:none!important}
-  #print-area{display:block!important;position:fixed;top:0;left:0;right:0;bottom:0}
-  .btc-card{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .card-wrap{display:flex;flex-wrap:wrap;gap:8px;background:white;border:none;padding:8px}
+  #print-area{display:block!important;position:static!important;width:100%}
+  /* Grid para A4 — 2 carteiras por linha com tamanho real CR-80 */
+  #print-cards.card-wrap,.card-wrap{display:flex!important;flex-wrap:wrap!important;gap:5mm!important;padding:8mm!important;background:white!important;border:none!important}
+  .btc-card{width:85.6mm!important;height:54mm!important;page-break-inside:avoid!important;break-inside:avoid!important;box-shadow:none!important;border:1.5px solid #1B3A70!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}
+  .btc-top,.btc-stripe,.btc-footer,.btc-photo{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 #print-area{display:none}
 
