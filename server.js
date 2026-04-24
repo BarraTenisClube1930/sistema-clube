@@ -132,9 +132,11 @@ function rowToSocio(row) {
 // 1. Buscar todos
 app.get('/api/socios', async (req, res) => {
   try {
-    const rows = await db.query(
-      `SELECT * FROM socios ORDER BY CAST(matricula AS INTEGER)`
-    );
+    // Ordena numericamente quando possível, empurra não-numéricos para o final
+    const orderSql = process.env.DATABASE_URL
+      ? `SELECT * FROM socios ORDER BY CASE WHEN matricula ~ '^[0-9]+$' THEN CAST(matricula AS INTEGER) ELSE 999999 END`
+      : `SELECT * FROM socios ORDER BY CASE WHEN CAST(matricula AS INTEGER) > 0 THEN CAST(matricula AS INTEGER) ELSE 999999 END`;
+    const rows = await db.query(orderSql);
     res.json(rows.map(rowToSocio));
   } catch (e) {
     res.status(500).json({ error: e.message });
